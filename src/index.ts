@@ -3,11 +3,23 @@
 import Fastify from 'fastify'
 import fastifyCors from 'fastify-cors';
 import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
-import { initPrismaProxy, prisma } from './database/prisma/prisma';
 import { environmentVariables } from './config';
+import { initPrismaProxy, prisma } from './database/prisma/prisma';
+import { configureRoutes } from './routes';
 
 async function main() {
-    const fastify = Fastify();
+    const fastify = Fastify({
+        logger: {
+            level: 'info',
+            transport: {
+                target: 'pino-pretty',
+                options: {
+                    translateTime: 'SYS:standard',
+                    colorize: true
+                }
+            }
+        }
+    });
 
     await fastify.register(fastifyCors, {
         origin: true,
@@ -17,8 +29,12 @@ async function main() {
     fastify.setValidatorCompiler(fastifyTypeProviderZod.validatorCompiler)
     fastify.setSerializerCompiler(fastifyTypeProviderZod.serializerCompiler)
 
+    await configureRoutes(fastify);
+
     try {
         await initPrismaProxy();
+
+        fastify.log.info("Starting Fastify server...");
 
         fastify.listen({
             port: environmentVariables.PORT,
@@ -36,7 +52,7 @@ async function main() {
     const signals: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
     signals.forEach(signal => {
         process.on(signal, async () => {
-            fastify.log.info(`Recived ${signal}, closing server`)
+            fastify.log.info(`Received ${signal}, closing server`)
 
             await prisma.$disconnect();
             await fastify.close();

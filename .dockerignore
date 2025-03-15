@@ -1,2 +1,5 @@
 node_modules
-.volumes
+npm-debug.log
+Dockerfile
+docker-compose.yml
+.env

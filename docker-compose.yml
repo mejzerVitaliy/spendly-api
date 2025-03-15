@@ -1,29 +1,36 @@
-version: '3.8'
-
 services:
-  backend:
+  db:
+    image: postgres:15
+    restart: always
+    container_name: spendly_db
+    ports:
+      - "${DATABASE_PORT}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  api:
     build: .
-    container_name: spendly-api
+    container_name: spendly
     restart: always
     ports:
-      - "5000:5000"
+      - "${PORT}:5000"
     depends_on:
       - db
     environment:
-      - .env
-
-  db:
-    image: postgres:16
-    container_name: spendly-db
-    restart: always
-    ports:
-      - "5433:5432"
-    environment:
-      POSTGRES_DB: spendly_db
-      POSTGRES_USER: spendly_user
-      POSTGRES_PASSWORD: spendly123
+      DATABASE_URL: ${DATABASE_URL}
+      NODE_ENV: ${NODE_ENV}
+      APPLICATION_SECRET: ${APPLICATION_SECRET}
+      APPLICATION_URL: ${APPLICATION_URL}
+      FRONTEND_URL: ${FRONTEND_URL}
+      DOCS_PASSWORD: ${DOCS_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - .:/app
+    command: npm run dev
 
 volumes:
-  pgdata:
+  postgres_data:
+
