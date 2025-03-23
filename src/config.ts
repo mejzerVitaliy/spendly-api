@@ -5,6 +5,7 @@ type EnvironmentVariables = {
     APPLICATION_URL: string,
     FRONTEND_URL: string,
     DOCS_PASSWORD: string,
+    APPLICATION_SECRET: string
 }
 
 const environmentVariables: EnvironmentVariables = {
@@ -13,7 +14,8 @@ const environmentVariables: EnvironmentVariables = {
     DATABASE_URL: process.env.DATABASE_URL!,
     APPLICATION_URL: process.env.APPLICATION_URL!,
     FRONTEND_URL: process.env.FRONTEND_URL!,
-    DOCS_PASSWORD: process.env.DOCS_PASSWORD || 'password'
+    DOCS_PASSWORD: process.env.DOCS_PASSWORD || 'password',
+    APPLICATION_SECRET: process.env.APPLICATION_SECRET!
 }
 
 export {environmentVariables};

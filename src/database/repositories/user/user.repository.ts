@@ -1,4 +1,4 @@
-import { Prisma, prisma } from '../../../database/prisma/prisma';
+import { Prisma, prisma } from '@/database/prisma/prisma';
 
 const create = <T extends Prisma.UserCreateArgs>(
     args: Prisma.SelectSubset<T, Prisma.UserCreateArgs>
