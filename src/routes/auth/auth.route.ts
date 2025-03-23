@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { getMeResponseSchema, loginBodySchema, loginResponseSchema, refreshTokenBodySchema, refreshTokenResponseSchema, registerBodySchema, registerResponseSchema } from "../../business";
+import { getMeResponseSchema, loginBodySchema, loginResponseSchema, messageResponseSchema, refreshTokenBodySchema, refreshTokenResponseSchema, registerBodySchema, registerResponseSchema } from "../../business";
 import { authHandler } from "./auth.handler";
 
 export const authRoutes = async (fastify: FastifyInstance) => {
@@ -62,5 +62,20 @@ export const authRoutes = async (fastify: FastifyInstance) => {
       }
     },
     authHandler.refresh
+  )
+
+  fastify.put(
+    "/logout",
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['auth'],
+        summary: 'Logout user',
+        response: {
+          200: messageResponseSchema
+        },
+      }
+    },
+    authHandler.logout
   )
 }

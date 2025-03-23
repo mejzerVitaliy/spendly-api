@@ -6,7 +6,6 @@ const save = async (userId: string, token: string, type: TokenType) => {
     where: {
       userId,
       type,
-      token
     }
   })
 
@@ -18,16 +17,16 @@ const save = async (userId: string, token: string, type: TokenType) => {
         type
       }
     })
+  } else {
+    return await tokenRepository.update({
+      where: {
+        id: foundToken.id
+      },
+      data: {
+        token
+      }
+    })
   }
-
-  return await tokenRepository.update({
-    where: {
-      id: foundToken.id
-    },
-    data: {
-      token
-    }
-  })
 }
 
 const getByToken = async (token: string) => {

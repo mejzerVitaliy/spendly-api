@@ -2,6 +2,8 @@ import { FastifyReply, FastifyRequest } from "fastify";
 import { LoginInput, RefreshTokenInput, RefreshTokenResponse, RegisterInput, UnauthorizedError } from "@/business";
 import { authService } from "@/business/services/auth/auth.service";
 import { JwtPayload } from "jsonwebtoken";
+import { tokenService } from "@/business/services/tokens/token.service";
+import { TokenType } from "@prisma/client";
 
 const register = async (
   req: FastifyRequest<{
@@ -84,9 +86,25 @@ const refresh = async (
   return reply.send(response);
 }
 
+const logout = async (
+  request: FastifyRequest, 
+  reply: FastifyReply
+) => {
+  const {userId} = request.user as JwtPayload;
+
+  await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
+
+  const response = {
+    message: 'User is logged out successfully'
+  }
+
+  reply.send(response)
+}
+
 export const authHandler = {
   register,
   login,
   getMe,
-  refresh
+  refresh,
+  logout
 }
