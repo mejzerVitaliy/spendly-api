@@ -3,7 +3,6 @@ import { getMeResponseSchema, loginBodySchema, loginResponseSchema, messageRespo
 import { authHandler } from "./auth.handler";
 
 export const authRoutes = async (fastify: FastifyInstance) => {
-
   fastify.post(
     "/register",
     {
