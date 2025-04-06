@@ -16,7 +16,8 @@
     "prisma:migrate:deploy": "prisma migrate deploy --schema src/database/prisma/schema.prisma",
     "prisma:studio": "prisma studio --schema src/database/prisma/schema.prisma",
     "prisma:seed": "prisma db seed --schema src/database/prisma/schema.prisma",
-    "prisma:reset": "prisma migrate reset --schema src/database/prisma/schema.prisma"
+    "prisma:reset": "prisma migrate reset --schema src/database/prisma/schema.prisma",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -28,12 +29,22 @@
   "bugs": {
     "url": "https://github.com/mejzerVitaliy/spendly-api/issues"
   },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "prettier --write"
+    ]
+  },
   "homepage": "https://github.com/mejzerVitaliy/spendly-api#readme",
   "description": "",
   "devDependencies": {
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
     "@types/bcrypt": "^5.0.2",
     "@types/jsonwebtoken": "^9.0.9",
-    "@types/node": "^22.13.10",
+    "@types/node": "^22.13.14",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.5.3",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.7.3"
