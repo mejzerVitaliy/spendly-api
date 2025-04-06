@@ -6,7 +6,7 @@ export const transactionSchema = z.object({
   id: z.string().uuid(),
   value: z.number(),
   currency: z.nativeEnum(Currency),
-  category: z.string(),
+  categoryId: z.string().uuid().optional(),
   madeAt: z.date(),
   type: z.nativeEnum(TransactionType),
   comment: z.string().optional(),
@@ -15,10 +15,11 @@ export const transactionSchema = z.object({
 export const createTransactionBodySchema = transactionSchema.pick({
   value: true,
   currency: true,
-  category: true,
   type: true,
-  comment: true
-})
+  comment: true,
+}).extend({
+  categoryId: z.string().uuid().optional(),
+});
 
 type CreateTransactionInput = z.infer<typeof createTransactionBodySchema>;
 

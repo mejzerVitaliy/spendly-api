@@ -1,10 +1,33 @@
-import { CreateTransactionInput, UpdateTransactionInput } from "@/business/lib";
+import { CreateTransactionInput, NotFoundError, UpdateTransactionInput } from "@/business/lib";
+import { categoryRepository } from "@/database/repositories/categories/category.repository";
 import { transactionRepository } from "@/database/repositories/transactions/transaction.repository";
 
 const create = async (data: CreateTransactionInput, userId: string) => {
+  if (data.categoryId) {
+    const category = await categoryRepository.findUnique({
+      where: {
+        id: data.categoryId
+      }
+    })
+
+    if (!category) {
+      throw new NotFoundError('Category not found')
+    }
+
+    if (data.type && category.type !== data.type) {
+      throw new Error('Transaction type must match category type');
+    }
+
+    if (category.userId && category.userId !== userId) {
+      throw new Error('Cannot use category from another user');
+    }
+  }
+  
+
   const transaction = await transactionRepository.create({
     data: {
       userId,
+      categoryId: data.categoryId || null,
       ...data
     }
   });
