@@ -1,82 +1,87 @@
-import { FastifyReply, FastifyRequest } from "fastify";
-import { LoginInput, RefreshTokenInput, RefreshTokenResponse, RegisterInput, UnauthorizedError } from "@/business";
-import { authService } from "@/business/services/auth/auth.service";
-import { JwtPayload } from "jsonwebtoken";
-import { tokenService } from "@/business/services/tokens/token.service";
-import { TokenType } from "@prisma/client";
+import { FastifyReply, FastifyRequest } from 'fastify';
+import {
+  LoginInput,
+  RefreshTokenInput,
+  RefreshTokenResponse,
+  RegisterInput,
+  UnauthorizedError,
+} from '@/business';
+import { authService } from '@/business/services/auth/auth.service';
+import { JwtPayload } from 'jsonwebtoken';
+import { tokenService } from '@/business/services/tokens/token.service';
+import { TokenType } from '@prisma/client';
 
 const register = async (
   req: FastifyRequest<{
-    Body: RegisterInput
-  }>, 
-  reply: FastifyReply
+    Body: RegisterInput;
+  }>,
+  reply: FastifyReply,
 ) => {
   const { body } = req;
-  
-  const {createdUser, accessToken, refreshToken} = await authService.register(body)
+
+  const { createdUser, accessToken, refreshToken } =
+    await authService.register(body);
 
   const response = {
     message: 'User is registered successfully',
     data: {
       user: createdUser,
       accessToken,
-      refreshToken
-    }
-  }
+      refreshToken,
+    },
+  };
 
-  reply.send(response)
-}
+  reply.send(response);
+};
 
 const login = async (
   request: FastifyRequest<{
-    Body: LoginInput
-  }>, 
-  reply: FastifyReply
+    Body: LoginInput;
+  }>,
+  reply: FastifyReply,
 ) => {
-  const {body} = request;
+  const { body } = request;
 
   const data = await authService.login(body);
 
   const response = {
     message: 'User is logged in successfully',
-    data
+    data,
   };
 
-  reply.send(response)
-}
+  reply.send(response);
+};
 
-const getMe = async (
-  request: FastifyRequest, 
-  reply: FastifyReply
-) => {
-  const {userId} = request.user as JwtPayload;
+const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = request.user as JwtPayload;
 
   const data = await authService.getMe(userId);
 
   const response = {
     message: 'User is logged in successfully',
-    data
+    data,
   };
 
-  reply.send(response)
-}
+  reply.send(response);
+};
 
 const refresh = async (
   request: FastifyRequest<{
-    Body: RefreshTokenInput
-  }>, 
-  reply: FastifyReply
+    Body: RefreshTokenInput;
+  }>,
+  reply: FastifyReply,
 ) => {
   const { refreshToken } = request.body;
 
   if (!refreshToken) {
-    throw UnauthorizedError("Refresh token is missing");
+    throw UnauthorizedError('Refresh token is missing');
   }
 
-  const { accessToken, newRefreshToken } = await authService.refresh(refreshToken);
+  const { accessToken, newRefreshToken } =
+    await authService.refresh(refreshToken);
 
   const response: RefreshTokenResponse = {
-    message: "Tokens refreshed successfully",
+    message: 'Tokens refreshed successfully',
     data: {
       accessToken,
       refreshToken: newRefreshToken,
@@ -84,27 +89,24 @@ const refresh = async (
   };
 
   return reply.send(response);
-}
+};
 
-const logout = async (
-  request: FastifyRequest, 
-  reply: FastifyReply
-) => {
-  const {userId} = request.user as JwtPayload;
+const logout = async (request: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = request.user as JwtPayload;
 
   await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
 
   const response = {
-    message: 'User is logged out successfully'
-  }
+    message: 'User is logged out successfully',
+  };
 
-  reply.send(response)
-}
+  reply.send(response);
+};
 
 export const authHandler = {
   register,
   login,
   getMe,
   refresh,
-  logout
-}
+  logout,
+};

@@ -1,40 +1,36 @@
-import { TokenType } from "@prisma/client";
-import { tokenRepository } from "../../../database/repositories/token/token.repository";
+import { TokenType } from '@prisma/client';
+import { tokenRepository } from '../../../database/repositories/token/token.repository';
+import { UnauthorizedError } from '@/business';
 
 const save = async (userId: string, token: string, type: TokenType) => {
-  const foundToken = await tokenRepository.findFirst({
-    where: {
-      userId,
-      type,
-    }
-  })
+  // Remove all existing tokens of this type for the user
+  await removeAllByUserId(userId, type);
 
-  if (!foundToken) {
-    return await tokenRepository.create({
-      data: {
-        userId,
-        token,
-        type
-      }
-    })
-  } else {
-    return await tokenRepository.update({
-      where: {
-        id: foundToken.id
-      },
-      data: {
-        token
-      }
-    })
-  }
-}
+  // Create new token
+  return await tokenRepository.create({
+    data: {
+      userId,
+      token,
+      type,
+    },
+  });
+};
 
 const getByToken = async (token: string) => {
-  return tokenRepository.findUnique({
-      where: {
-          token,
-      },
+  const foundToken = await tokenRepository.findUnique({
+    where: {
+      token,
+    },
+    include: {
+      user: true,
+    },
   });
+
+  if (!foundToken) {
+    throw new UnauthorizedError('Invalid refresh token');
+  }
+
+  return foundToken;
 };
 
 const getByUserId = async (userId: string, type: TokenType) => {

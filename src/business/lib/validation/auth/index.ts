@@ -1,9 +1,8 @@
-import { z } from "zod";
-import { createResponseWithDataSchema } from "../application";
-import { create } from "domain";
+import { z } from 'zod';
+import { createResponseWithDataSchema } from '../application';
 
 const passwordSchema = z.string().min(6, {
-  message: "Password must be at least 6 characters long",
+  message: 'Password must be at least 6 characters long',
 });
 
 const baseUserSchema = z.object({
@@ -33,7 +32,7 @@ export const registerResponseSchema = createResponseWithDataSchema(
     user: userWithoutPasswordSchema,
     accessToken: z.string(),
     refreshToken: z.string(),
-  })
+  }),
 );
 
 type RegisterResponse = z.infer<typeof registerResponseSchema>;
@@ -50,16 +49,16 @@ export const loginResponseSchema = createResponseWithDataSchema(
     user: userWithoutPasswordSchema,
     accessToken: z.string(),
     refreshToken: z.string(),
-  })
+  }),
 );
 
 type LoginResponse = z.infer<typeof loginResponseSchema>;
 
 export const getMeResponseSchema = createResponseWithDataSchema(
-  userWithoutPasswordSchema
+  userWithoutPasswordSchema,
 );
 
-type GetMeResponse = z.infer<typeof getMeResponseSchema>
+type GetMeResponse = z.infer<typeof getMeResponseSchema>;
 
 export const refreshTokenBodySchema = z.object({
   refreshToken: z.string(),
@@ -71,10 +70,10 @@ export const refreshTokenResponseSchema = createResponseWithDataSchema(
   z.object({
     accessToken: z.string(),
     refreshToken: z.string(),
-  })
+  }),
 );
 
-type RefreshTokenResponse = z.infer<typeof refreshTokenResponseSchema>
+type RefreshTokenResponse = z.infer<typeof refreshTokenResponseSchema>;
 
 export {
   RegisterInput,
@@ -82,6 +81,6 @@ export {
   LoginInput,
   LoginResponse,
   GetMeResponse,
-  RefreshTokenInput, 
-  RefreshTokenResponse
-}
+  RefreshTokenInput,
+  RefreshTokenResponse,
+};

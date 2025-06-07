@@ -13,15 +13,16 @@ enum TokenType {
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  email     String   @unique
-  firstName String
-  lastName  String
-  password  String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  firstName    String
+  lastName     String
+  password     String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  tokens    Token[]
+  tokens       Token[]
+  transactions Transaction[]
 
   @@map("users")
 }
@@ -37,4 +38,48 @@ model Token {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("tokens")
+}
+
+enum Category {
+  SALARY
+  GIFT
+  INVESTMENT
+  FOOD
+  TRANSPORT
+  HOUSING
+  UTILITIES
+  HEALTH
+  HOBBY
+  OTHER
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum Currency {
+  USD
+  EUR
+  UAH
+}
+
+model Transaction {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+
+  amount       Int       @default(0)
+  date         DateTime
+  currency     Currency  @default(USD)
+  description  String?
+
+  category     Category
+  type         TransactionType
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("transactions")
 }
