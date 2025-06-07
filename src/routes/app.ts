@@ -1,8 +1,8 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance } from 'fastify';
 
 const applicationRoutes = async (fastify: FastifyInstance) => {
-  fastify.get("/ping", async () => {
-    return "pong";
+  fastify.get('/ping', async () => {
+    return 'pong';
   });
 };
 

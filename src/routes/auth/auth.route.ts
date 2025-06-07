@@ -1,81 +1,89 @@
-import { FastifyInstance } from "fastify";
-import { getMeResponseSchema, loginBodySchema, loginResponseSchema, messageResponseSchema, refreshTokenBodySchema, refreshTokenResponseSchema, registerBodySchema, registerResponseSchema } from "../../business";
-import { authHandler } from "./auth.handler";
+import { FastifyInstance } from 'fastify';
+import {
+  getMeResponseSchema,
+  loginBodySchema,
+  loginResponseSchema,
+  messageResponseSchema,
+  refreshTokenBodySchema,
+  refreshTokenResponseSchema,
+  registerBodySchema,
+  registerResponseSchema,
+} from '../../business';
+import { authHandler } from './auth.handler';
 
 export const authRoutes = async (fastify: FastifyInstance) => {
-
   fastify.post(
-    "/register",
+    '/register',
     {
       schema: {
         tags: ['auth'],
         summary: 'Register a new user',
         body: registerBodySchema,
         response: {
-          200: registerResponseSchema
+          200: registerResponseSchema,
         },
-      }
+      },
     },
-    authHandler.register
+    authHandler.register,
   );
 
   fastify.post(
-    "/login",
+    '/login',
     {
       schema: {
         tags: ['auth'],
         summary: 'Login a user',
         body: loginBodySchema,
         response: {
-          200: loginResponseSchema
+          200: loginResponseSchema,
         },
-      }
+      },
     },
-    authHandler.login
+    authHandler.login,
   );
 
   fastify.get(
-    "/me",
+    '/me',
     {
       preHandler: fastify.authenticate,
       schema: {
         tags: ['auth'],
         summary: 'Get current user',
         response: {
-          200: getMeResponseSchema
+          200: getMeResponseSchema,
         },
-      }
+      },
     },
-    authHandler.getMe
-  ) 
+    authHandler.getMe,
+  );
 
   fastify.post(
-    "/refresh",
+    '/refresh',
     {
       schema: {
         tags: ['auth'],
         summary: 'Refresh tokens',
         body: refreshTokenBodySchema,
         response: {
-          200: refreshTokenResponseSchema
+          200: refreshTokenResponseSchema,
         },
-      }
+      },
     },
-    authHandler.refresh
-  )
+    authHandler.refresh,
+  );
 
   fastify.put(
-    "/logout",
+    '/logout',
     {
       preHandler: fastify.authenticate,
       schema: {
         tags: ['auth'],
         summary: 'Logout user',
         response: {
-          200: messageResponseSchema
+          200: messageResponseSchema,
         },
-      }
+      },
     },
-    authHandler.logout
-  )
-}
+    authHandler.logout,
+  );
+};

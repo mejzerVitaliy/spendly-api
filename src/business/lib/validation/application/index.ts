@@ -1,7 +1,7 @@
-import { z, ZodSchema } from "zod";
+import { z, ZodSchema } from 'zod';
 
 export const createResponseWithDataSchema = <T extends ZodSchema>(
-  dataSchema: T
+  dataSchema: T,
 ) =>
   z.object({
     message: z.string(),
@@ -20,7 +20,4 @@ export const idParamsSchema = z.object({
 
 type IdInput = z.infer<typeof idParamsSchema>;
 
-export type {
-  MessageResponse,
-  IdInput
-}
+export type { MessageResponse, IdInput };
