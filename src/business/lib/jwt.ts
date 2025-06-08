@@ -2,7 +2,7 @@ import jwt, { SignOptions } from 'jsonwebtoken';
 import { environmentVariables } from '../../config';
 
 const ACCESS_TOKEN_EXPIRATION = '15m';
-const REFRESH_TOKEN_EXPIRATION = '7d';
+const REFRESH_TOKEN_EXPIRATION = '30d';
 
 const signJwtToken = (
   payload: string | object | Buffer,

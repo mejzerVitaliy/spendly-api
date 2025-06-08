@@ -13,7 +13,14 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     },
   });
 
-  return transaction;
+  if (!transaction) {
+    throw NotFoundError('Transaction not created');
+  }
+
+  return {
+    ...transaction,
+    date: transaction.date.toISOString(),
+  };
 };
 
 const getAll = async (userId: string) => {
@@ -24,10 +31,13 @@ const getAll = async (userId: string) => {
   });
 
   if (!transactions) {
-    throw NotFoundError('Transactions not found');
+    return [];
   }
 
-  return transactions;
+  return transactions.map((transaction) => ({
+    ...transaction,
+    date: transaction.date.toISOString(),
+  }));
 };
 
 const getById = async (userId: string, id: string) => {
@@ -45,7 +55,10 @@ const getById = async (userId: string, id: string) => {
     throw NotFoundError('Transaction not found');
   }
 
-  return transaction;
+  return {
+    ...transaction,
+    date: transaction.date.toISOString(),
+  };
 };
 
 const update = async (id: string, input: UpdateTransactionInput) => {
@@ -58,7 +71,10 @@ const update = async (id: string, input: UpdateTransactionInput) => {
     },
   });
 
-  return transaction;
+  return {
+    ...transaction,
+    date: transaction.date.toISOString(),
+  };
 };
 
 const remove = async (id: string) => {
