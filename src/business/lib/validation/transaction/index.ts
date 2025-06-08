@@ -1,11 +1,11 @@
 import { Category, Currency, TransactionType } from '@prisma/client';
 import { z } from 'zod';
-import { createResponseWithDataSchema } from '../..';
+import { createResponseWithDataSchema } from '@/business/lib/validation';
 
 export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
   amount: z.number(),
-  date: z.date(),
+  date: z.string().datetime(),
   currency: z.nativeEnum(Currency),
   description: z.string().optional(),
   category: z.nativeEnum(Category),
@@ -24,21 +24,15 @@ export const createTransactionBodySchema = transactionBaseSchema.pick({
 type CreateTransactionInput = z.infer<typeof createTransactionBodySchema>;
 
 export const createTransactionResponseSchema = createResponseWithDataSchema(
-  z.object({
-    transaction: transactionBaseSchema,
-  }),
+  transactionBaseSchema,
 );
 
 export const getAllTransactionsResponseSchema = createResponseWithDataSchema(
-  z.object({
-    transactions: transactionBaseSchema.array(),
-  }),
+  z.array(transactionBaseSchema),
 );
 
 export const getTransactionByIdResponseSchema = createResponseWithDataSchema(
-  z.object({
-    transaction: transactionBaseSchema,
-  }),
+  transactionBaseSchema,
 );
 
 const updateTransactionBodySchema = transactionBaseSchema.partial();
@@ -46,9 +40,7 @@ const updateTransactionBodySchema = transactionBaseSchema.partial();
 type UpdateTransactionInput = z.infer<typeof updateTransactionBodySchema>;
 
 export const updateTransactionResponseSchema = createResponseWithDataSchema(
-  z.object({
-    transaction: transactionBaseSchema,
-  }),
+  transactionBaseSchema,
 );
 
 export type { CreateTransactionInput, UpdateTransactionInput };
