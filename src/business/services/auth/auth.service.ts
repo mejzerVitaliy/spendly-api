@@ -36,6 +36,7 @@ const register = async (user: RegisterInput) => {
       lastName: user.lastName,
       email: user.email,
       password: hashedPassword,
+      avatarUrl: '',
     },
   });
 

@@ -5,11 +5,12 @@ const passwordSchema = z.string().min(6, {
   message: 'Password must be at least 6 characters long',
 });
 
-const baseUserSchema = z.object({
+export const baseUserSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
   firstName: z.string(),
   lastName: z.string(),
+  avatarUrl: z.string().optional(),
 });
 
 const userWithPasswordSchema = baseUserSchema.extend({

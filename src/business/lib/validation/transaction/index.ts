@@ -1,6 +1,6 @@
 import { Category, Currency, TransactionType } from '@prisma/client';
 import { z } from 'zod';
-import { createResponseWithDataSchema } from '@/business/lib/validation';
+import { createResponseWithDataSchema } from '../application';
 
 export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
