@@ -1,6 +1,8 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import {
   LoginInput,
+  LoginTwoFactorInput,
+  LoginTwoFactorResendInput,
   RefreshTokenInput,
   RefreshTokenResponse,
   RegisterInput,
@@ -52,13 +54,63 @@ const login = async (
   reply.send(response);
 };
 
+const loginTwoFactor = async (
+  request: FastifyRequest<{
+    Body: LoginTwoFactorInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { body } = request;
+
+  const data = await authService.loginTwoFactor(body);
+
+  const response = {
+    message: 'User is logged in successfully with two-factor authentication',
+    data,
+  };
+
+  reply.send(response);
+};
+
+const loginTwoFactorResend = async (
+  request: FastifyRequest<{
+    Body: LoginTwoFactorResendInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { body } = request;
+
+  const data = await authService.loginTwoFactorResend(body);
+
+  const response = {
+    message: 'Two-factor authentication code is resent successfully',
+  };
+
+  reply.send(response);
+};
+
+const toggleTwoFactor = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const { userId } = request.user as JwtPayload;
+
+  await authService.toggleTwoFactor(userId);
+
+  const response = {
+    message: 'Two-factor authentication is toggled successfully',
+  };
+
+  reply.send(response);
+};
+
 const getMe = async (request: FastifyRequest, reply: FastifyReply) => {
   const { userId } = request.user as JwtPayload;
 
   const data = await authService.getMe(userId);
 
   const response = {
-    message: 'User is logged in successfully',
+    message: 'User is fetched successfully',
     data,
   };
 
@@ -106,6 +158,9 @@ const logout = async (request: FastifyRequest, reply: FastifyReply) => {
 export const authHandler = {
   register,
   login,
+  loginTwoFactor,
+  loginTwoFactorResend,
+  toggleTwoFactor,
   getMe,
   refresh,
   logout,

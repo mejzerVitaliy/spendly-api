@@ -9,10 +9,17 @@ import {
   LoginInput,
   RegisterInput,
   UnauthorizedError,
+  LoginTwoFactorInput,
+  LoginTwoFactorResendInput,
 } from '@/business/lib';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
 import { TokenType } from '@prisma/client';
+import { emailService } from '@/bootstrap/email';
+
+const generateTwoFactorCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
 
 const register = async (user: RegisterInput) => {
   const existingUser = await userRepository.findFirst({
@@ -39,6 +46,8 @@ const register = async (user: RegisterInput) => {
       avatarUrl: '',
     },
   });
+
+  await emailService.sendWelcomeEmail(createdUser.email);
 
   const { accessToken, refreshToken } = await generateTokens(createdUser.id);
 
@@ -69,8 +78,82 @@ const login = async ({ email, password }: LoginInput) => {
     throw new BadRequestError('Invalid password');
   }
 
-  // Remove any existing refresh tokens for this user
   await tokenService.removeAllByUserId(user.id, TokenType.REFRESH);
+
+  console.log('🔐 User 2FA Status:', {
+    email: user.email,
+    isTwoFactorEnabled: user.isTwoFactorEnabled,
+  });
+
+  if (user.isTwoFactorEnabled) {
+    console.log('📧 Sending 2FA code...');
+
+    const twoFactorCode = generateTwoFactorCode();
+    const twoFactorExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+    await userRepository.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        twoFactorCode,
+        twoFactorExpiresAt,
+      },
+    });
+
+    try {
+      await emailService.sendEmail(
+        user.email,
+        'Two-Factor Authentication Code',
+        `<p>Your two-factor authentication code is: <strong>${twoFactorCode}</strong></p>`,
+      );
+    } catch (error) {
+      throw new BadRequestError(
+        'Failed to send verification code. Please try again.',
+      );
+    }
+
+    return {
+      user,
+      requiresTwoFactor: true,
+      message: 'Two-factor authentication code sent to your email',
+    };
+  } else {
+    const { accessToken, refreshToken } = await generateTokens(user.id);
+
+    return {
+      user,
+      accessToken,
+      refreshToken,
+    };
+  }
+};
+
+const loginTwoFactor = async ({ email, code }: LoginTwoFactorInput) => {
+  const user = await userRepository.findFirst({
+    where: {
+      email,
+    },
+  });
+
+  if (!user || !user.twoFactorCode || !user.twoFactorExpiresAt) {
+    throw new BadRequestError('2FA not requested or expired');
+  }
+
+  const isValidCode = user.twoFactorCode === code;
+  const isExpired = new Date() > user.twoFactorExpiresAt;
+
+  if (!isValidCode || isExpired) {
+    throw new BadRequestError('Invalid or expired 2FA code');
+  }
+
+  await userRepository.update({
+    where: { id: user.id },
+    data: {
+      twoFactorCode: null,
+      twoFactorExpiresAt: null,
+    },
+  });
 
   const { accessToken, refreshToken } = await generateTokens(user.id);
 
@@ -79,6 +162,47 @@ const login = async ({ email, password }: LoginInput) => {
     accessToken,
     refreshToken,
   };
+};
+
+const loginTwoFactorResend = async ({ email }: LoginTwoFactorResendInput) => {
+  const user = await userRepository.findFirst({
+    where: { email },
+  });
+
+  if (!user) {
+    throw new BadRequestError('User not found');
+  }
+
+  const twoFactorCode = generateTwoFactorCode();
+  const twoFactorExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+
+  await userRepository.update({
+    where: { id: user.id },
+    data: { twoFactorCode, twoFactorExpiresAt },
+  });
+
+  await emailService.sendEmail(
+    user.email,
+    'Two-Factor Authentication Code',
+    `<p>Your two-factor authentication code is: <strong>${twoFactorCode}</strong></p>`,
+  );
+};
+
+const toggleTwoFactor = async (userId: string) => {
+  const user = await userRepository.findFirst({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw new BadRequestError('User not found');
+  }
+
+  const newState = !user.isTwoFactorEnabled;
+
+  await userRepository.update({
+    where: { id: userId },
+    data: { isTwoFactorEnabled: newState },
+  });
 };
 
 const generateTokens = async (userId: string) => {
@@ -142,6 +266,9 @@ const refresh = async (refreshToken: string) => {
 export const authService = {
   register,
   login,
+  loginTwoFactor,
+  loginTwoFactorResend,
+  toggleTwoFactor,
   getMe,
   refresh,
 };

@@ -1,7 +1,14 @@
-import { userRepository } from '@/database/repositories/user';
-import { cloudinaryService } from '@/business/services/cloudinary/cloudinary.service';
-import { BadRequestError, UpdateProfileInput } from '@/business/lib';
+import { userRepository } from '@/database/repositories';
+import { cloudinaryService } from '@/business/services';
+import {
+  BadRequestError,
+  UnauthorizedError,
+  UpdatePasswordInput,
+  UpdateProfileInput,
+  UpdateSettingsInput,
+} from '@/business/lib';
 import { FastifyRequest } from 'fastify';
+import bcrypt from 'bcryptjs';
 
 const updateProfile = async (userId: string, data: UpdateProfileInput) => {
   const updatedUser = await userRepository.update({
@@ -15,39 +22,26 @@ const updateProfile = async (userId: string, data: UpdateProfileInput) => {
 };
 
 const uploadAvatar = async (userId: string, request: FastifyRequest) => {
-  // Отладочная информация
-  console.log('Content-Type:', request.headers['content-type']);
-  console.log('Content-Length:', request.headers['content-length']);
-
   try {
-    // Простой подход с request.file()
     const data = await request.file();
-    console.log('File data:', data ? 'File found' : 'No file');
 
     if (!data) {
       throw new BadRequestError('No file uploaded');
     }
-
-    console.log('File info:', {
-      fieldname: data.fieldname,
-      filename: data.filename,
-      mimetype: data.mimetype,
-      encoding: data.encoding,
-    });
 
     if (!data.mimetype.startsWith('image/')) {
       throw new BadRequestError('Only image files are allowed');
     }
 
     const chunks: Buffer[] = [];
+
     for await (const chunk of data.file) {
       chunks.push(chunk);
     }
     const fileBuffer = Buffer.concat(chunks);
 
-    console.log('File buffer size:', fileBuffer.length);
-
     const MAX_SIZE = 5 * 1024 * 1024;
+
     if (fileBuffer.length > MAX_SIZE) {
       throw new BadRequestError('File size too large. Maximum 5MB allowed');
     }
@@ -64,6 +58,7 @@ const uploadAvatar = async (userId: string, request: FastifyRequest) => {
 
     if (user.avatarUrl) {
       const publicId = extractPublicIdFromUrl(user.avatarUrl);
+
       if (publicId) {
         await cloudinaryService.deleteAvatar(publicId);
       }
@@ -83,7 +78,6 @@ const uploadAvatar = async (userId: string, request: FastifyRequest) => {
     return updatedUser;
   } catch (error) {
     console.error('Upload error:', error);
-    throw error;
   }
 };
 
@@ -129,8 +123,57 @@ const extractPublicIdFromUrl = (url: string): string | null => {
   }
 };
 
+const verifyPassword = async (password: string, hashedPassword: string) => {
+  return await bcrypt.compare(password, hashedPassword);
+};
+
+const updatePassword = async (userId: string, data: UpdatePasswordInput) => {
+  const user = await userRepository.findFirst({
+    where: {
+      id: userId,
+    },
+  });
+
+  if (!user) {
+    throw new BadRequestError('User not found');
+  }
+
+  const isPasswordValid = await verifyPassword(data.oldPassword, user.password);
+
+  if (!isPasswordValid) {
+    throw new UnauthorizedError('Invalid password');
+  }
+
+  const hashedPassword = await bcrypt.hash(data.newPassword, 10);
+
+  await userRepository.update({
+    where: {
+      id: userId,
+    },
+    data: {
+      password: hashedPassword,
+    },
+  });
+};
+
+const deleteUser = async (userId: string) => {
+  await userRepository.delete({
+    where: { id: userId },
+  });
+};
+
+const updateSettings = async (userId: string, data: UpdateSettingsInput) => {
+  await userRepository.update({
+    where: { id: userId },
+    data,
+  });
+};
+
 export const profileService = {
   updateProfile,
   uploadAvatar,
   deleteAvatar,
+  updatePassword,
+  deleteUser,
+  updateSettings,
 };

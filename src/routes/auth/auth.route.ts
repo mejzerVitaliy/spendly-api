@@ -3,6 +3,9 @@ import {
   getMeResponseSchema,
   loginBodySchema,
   loginResponseSchema,
+  loginTwoFactorBodySchema,
+  loginTwoFactorResendBodySchema,
+  loginTwoFactorResponseSchema,
   messageResponseSchema,
   refreshTokenBodySchema,
   refreshTokenResponseSchema,
@@ -40,6 +43,51 @@ export const authRoutes = async (fastify: FastifyInstance) => {
       },
     },
     authHandler.login,
+  );
+
+  fastify.post(
+    '/login/two-factor',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Login a user with two-factor authentication',
+        body: loginTwoFactorBodySchema,
+        response: {
+          200: loginTwoFactorResponseSchema,
+        },
+      },
+    },
+    authHandler.loginTwoFactor,
+  );
+
+  fastify.post(
+    '/login/two-factor/resend',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Resend two-factor authentication code',
+        body: loginTwoFactorResendBodySchema,
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    authHandler.loginTwoFactorResend,
+  );
+
+  fastify.put(
+    '/toggle-two-factor',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['auth'],
+        summary: 'Toggle two-factor authentication',
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    authHandler.toggleTwoFactor,
   );
 
   fastify.get(

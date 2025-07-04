@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
+import { Currency } from '@prisma/client';
 
 const passwordSchema = z.string().min(6, {
   message: 'Password must be at least 6 characters long',
@@ -11,6 +12,8 @@ export const baseUserSchema = z.object({
   firstName: z.string(),
   lastName: z.string(),
   avatarUrl: z.string().optional(),
+  isTwoFactorEnabled: z.boolean(),
+  mainCurrency: z.nativeEnum(Currency),
 });
 
 const userWithPasswordSchema = baseUserSchema.extend({
@@ -48,12 +51,35 @@ type LoginInput = z.infer<typeof loginBodySchema>;
 export const loginResponseSchema = createResponseWithDataSchema(
   z.object({
     user: userWithoutPasswordSchema,
+    accessToken: z.string().optional(),
+    refreshToken: z.string().optional(),
+  }),
+);
+
+type LoginResponse = z.infer<typeof loginResponseSchema>;
+
+export const loginTwoFactorBodySchema = z.object({
+  email: z.string().email(),
+  code: z.string(),
+});
+
+type LoginTwoFactorInput = z.infer<typeof loginTwoFactorBodySchema>;
+
+export const loginTwoFactorResendBodySchema = z.object({
+  email: z.string().email(),
+});
+
+type LoginTwoFactorResendInput = z.infer<typeof loginTwoFactorResendBodySchema>;
+
+export const loginTwoFactorResponseSchema = createResponseWithDataSchema(
+  z.object({
+    user: userWithoutPasswordSchema,
     accessToken: z.string(),
     refreshToken: z.string(),
   }),
 );
 
-type LoginResponse = z.infer<typeof loginResponseSchema>;
+type LoginTwoFactorResponse = z.infer<typeof loginTwoFactorResponseSchema>;
 
 export const getMeResponseSchema = createResponseWithDataSchema(
   userWithoutPasswordSchema,
@@ -81,7 +107,10 @@ export {
   RegisterResponse,
   LoginInput,
   LoginResponse,
+  LoginTwoFactorInput,
+  LoginTwoFactorResponse,
   GetMeResponse,
   RefreshTokenInput,
   RefreshTokenResponse,
+  LoginTwoFactorResendInput,
 };

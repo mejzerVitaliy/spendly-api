@@ -1,18 +1,24 @@
 import { z } from 'zod';
-import { createResponseWithDataSchema } from '../application';
+import { Currency } from '@prisma/client';
 
 export const updateProfileBodySchema = z.object({
   firstName: z.string().min(1).optional(),
   lastName: z.string().min(1).optional(),
 });
 
-export const deleteAvatarResponseSchema = createResponseWithDataSchema(
-  z.object({
-    message: z.string(),
-  }),
-);
-
 type UpdateProfileInput = z.infer<typeof updateProfileBodySchema>;
-type DeleteAvatarResponse = z.infer<typeof deleteAvatarResponseSchema>;
 
-export type { UpdateProfileInput, DeleteAvatarResponse };
+export const updatePasswordBodySchema = z.object({
+  oldPassword: z.string().min(1),
+  newPassword: z.string().min(1),
+});
+
+type UpdatePasswordInput = z.infer<typeof updatePasswordBodySchema>;
+
+export const updateSettingsBodySchema = z.object({
+  mainCurrency: z.nativeEnum(Currency),
+});
+
+type UpdateSettingsInput = z.infer<typeof updateSettingsBodySchema>;
+
+export type { UpdateProfileInput, UpdatePasswordInput, UpdateSettingsInput };

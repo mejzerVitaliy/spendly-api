@@ -1,5 +1,10 @@
 import { FastifyInstance } from 'fastify';
-import { updateProfileBodySchema, messageResponseSchema } from '../../business';
+import {
+  updateProfileBodySchema,
+  messageResponseSchema,
+  updatePasswordBodySchema,
+  updateSettingsBodySchema,
+} from '../../business';
 import { profileHandler } from './profile.handler';
 
 export const profileRoutes = async (fastify: FastifyInstance) => {
@@ -48,5 +53,52 @@ export const profileRoutes = async (fastify: FastifyInstance) => {
       },
     },
     profileHandler.deleteAvatar,
+  );
+
+  fastify.put(
+    '/update-password',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['profile'],
+        summary: 'Update user password',
+        body: updatePasswordBodySchema,
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    profileHandler.updatePassword,
+  );
+
+  fastify.delete(
+    '/delete',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['profile'],
+        summary: 'Delete user',
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    profileHandler.deleteUser,
+  );
+
+  fastify.put(
+    '/update-settings',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['profile'],
+        summary: 'Update user settings',
+        body: updateSettingsBodySchema,
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    profileHandler.updateSettings,
   );
 };

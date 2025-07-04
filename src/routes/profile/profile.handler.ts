@@ -1,5 +1,9 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { UpdateProfileInput, BadRequestError } from '@/business/lib';
+import {
+  UpdateProfileInput,
+  UpdatePasswordInput,
+  UpdateSettingsInput,
+} from '@/business/lib';
 import { JwtPayload } from 'jsonwebtoken';
 import { profileService } from '@/business/services/profile/profile.service';
 
@@ -45,8 +49,59 @@ const deleteAvatar = async (request: FastifyRequest, reply: FastifyReply) => {
   reply.send(response);
 };
 
+const updatePassword = async (
+  request: FastifyRequest<{
+    Body: UpdatePasswordInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = request.user as JwtPayload;
+  const { body } = request;
+
+  await profileService.updatePassword(userId, body);
+
+  const response = {
+    message: 'Password updated successfully',
+  };
+
+  reply.send(response);
+};
+
+const deleteUser = async (request: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = request.user as JwtPayload;
+
+  await profileService.deleteUser(userId);
+
+  const response = {
+    message: 'User is deleted successfully',
+  };
+
+  reply.send(response);
+};
+
+const updateSettings = async (
+  request: FastifyRequest<{
+    Body: UpdateSettingsInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = request.user as JwtPayload;
+  const { body } = request;
+
+  await profileService.updateSettings(userId, body);
+
+  const response = {
+    message: 'Settings updated successfully',
+  };
+
+  reply.send(response);
+};
+
 export const profileHandler = {
   updateProfile,
   updateAvatar,
   deleteAvatar,
+  updatePassword,
+  deleteUser,
+  updateSettings,
 };

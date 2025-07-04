@@ -6,7 +6,7 @@ import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
 import { environmentVariables } from './config';
 import { initPrismaProxy, prisma } from './database/prisma/prisma';
 import { configureRoutes } from './routes';
-import { configureJwt, configureMultipart } from './bootstrap';
+import { configureJwt, configureMultipart, emailService } from './bootstrap';
 
 async function main() {
   const fastify = Fastify({
@@ -33,6 +33,7 @@ async function main() {
   await configureJwt(fastify);
   await configureMultipart(fastify);
   await configureRoutes(fastify);
+  await emailService.sendWelcomeEmail('mejzervitalik@gmail.com');
 
   try {
     await initPrismaProxy();
