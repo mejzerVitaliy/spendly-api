@@ -14,6 +14,7 @@ export const baseUserSchema = z.object({
   avatarUrl: z.string().optional(),
   isTwoFactorEnabled: z.boolean(),
   mainCurrency: z.nativeEnum(Currency),
+  totalBalance: z.number(),
 });
 
 const userWithPasswordSchema = baseUserSchema.extend({

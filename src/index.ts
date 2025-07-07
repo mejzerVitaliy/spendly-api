@@ -33,7 +33,6 @@ async function main() {
   await configureJwt(fastify);
   await configureMultipart(fastify);
   await configureRoutes(fastify);
-  await emailService.sendWelcomeEmail('mejzervitalik@gmail.com');
 
   try {
     await initPrismaProxy();

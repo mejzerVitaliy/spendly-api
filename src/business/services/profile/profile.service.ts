@@ -9,6 +9,7 @@ import {
 } from '@/business/lib';
 import { FastifyRequest } from 'fastify';
 import bcrypt from 'bcryptjs';
+import { currencyService } from '../currency';
 
 const updateProfile = async (userId: string, data: UpdateProfileInput) => {
   const updatedUser = await userRepository.update({
@@ -162,10 +163,27 @@ const deleteUser = async (userId: string) => {
   });
 };
 
-const updateSettings = async (userId: string, data: UpdateSettingsInput) => {
+const updateSettings = async (id: string, data: UpdateSettingsInput) => {
+  const user = await userRepository.findUnique({
+    where: { id },
+  });
+
+  if (!user) {
+    throw new BadRequestError('User not found');
+  }
+
+  const convertedAmount = await currencyService.convertAmount(
+    user.totalBalance,
+    user.mainCurrency,
+    data.mainCurrency,
+  );
+
   await userRepository.update({
-    where: { id: userId },
-    data,
+    where: { id },
+    data: {
+      totalBalance: convertedAmount,
+      mainCurrency: data.mainCurrency,
+    },
   });
 };
 
