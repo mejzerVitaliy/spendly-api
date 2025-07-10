@@ -20,6 +20,8 @@ model User {
   password           String
   avatarUrl          String?
 
+  totalBalance       Int      @default(0)
+
   isTwoFactorEnabled Boolean  @default(false)
   twoFactorCode      String?
   twoFactorExpiresAt DateTime?
