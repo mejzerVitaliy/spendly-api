@@ -6,6 +6,7 @@ import {
 import { transactionRepository, userRepository } from '@/database/repositories';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
+import { snapshotService } from '../snapshot/snapshot.service';
 
 const create = async (userId: string, input: CreateTransactionInput) => {
   const transaction = await transactionRepository.create({
@@ -48,6 +49,14 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     },
   });
 
+  await snapshotService.createOrUpdateSnapshot({
+    userId,
+    date: transaction.date,
+    amount: convertedAmount,
+    type: transaction.type,
+    currency: user.mainCurrency,
+  });
+
   return {
     ...transaction,
     date: transaction.date.toISOString(),
@@ -58,6 +67,9 @@ const getAll = async (userId: string) => {
   const transactions = await transactionRepository.findMany({
     where: {
       userId,
+    },
+    orderBy: {
+      date: 'asc',
     },
   });
 
@@ -121,6 +133,13 @@ const update = async (id: string, input: UpdateTransactionInput) => {
     newBalance += oldAmountConverted;
   }
 
+  await snapshotService.removeTransactionFromSnapshot(
+    transaction.userId,
+    transaction.date,
+    oldAmountConverted,
+    transaction.type,
+  );
+
   const updatedTransaction = {
     ...transaction,
     ...input,
@@ -149,6 +168,14 @@ const update = async (id: string, input: UpdateTransactionInput) => {
     data: {
       totalBalance: newBalance,
     },
+  });
+
+  await snapshotService.createOrUpdateSnapshot({
+    userId: transaction.userId,
+    date: updatedTransaction.date,
+    amount: finalAmountConverted,
+    type: updatedTransaction.type,
+    currency: user.mainCurrency,
   });
 
   return {
@@ -200,6 +227,13 @@ const remove = async (id: string) => {
       totalBalance,
     },
   });
+
+  await snapshotService.removeTransactionFromSnapshot(
+    transaction.userId,
+    transaction.date,
+    convertedAmount,
+    transaction.type,
+  );
 
   await transactionRepository.delete({
     where: {
