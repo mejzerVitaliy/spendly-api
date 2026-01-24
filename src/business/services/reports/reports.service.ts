@@ -46,7 +46,7 @@ const getSummary = async (
     if (!latestSnapshot) {
       return {
         totalBalance: user.totalBalance,
-        currency: user.mainCurrency,
+        currencyCode: user.mainCurrencyCode,
         totalIncome: 0,
         totalExpense: 0,
         netChange: 0,
@@ -78,7 +78,7 @@ const getSummary = async (
 
     return {
       totalBalance: latestSnapshot.closingBalance,
-      currency: user.mainCurrency,
+      currencyCode: user.mainCurrencyCode,
       totalIncome,
       totalExpense,
       netChange: totalIncome - totalExpense,
@@ -133,7 +133,7 @@ const getSummary = async (
 
   return {
     totalBalance,
-    currency: user.mainCurrency,
+    currencyCode: user.mainCurrencyCode,
     totalIncome,
     totalExpense,
     netChange: totalIncome - totalExpense,
@@ -179,8 +179,8 @@ const getCategoryBarChartData = async (
   for (const transaction of transactions) {
     const convertedAmount = await currencyService.convertAmount(
       transaction.amount,
-      transaction.currency,
-      user.mainCurrency,
+      transaction.currencyCode,
+      user.mainCurrencyCode,
     );
 
     const existing = categoryMap.get(transaction.category) || {
@@ -245,8 +245,8 @@ const getCategoryPieChartData = async (
   for (const transaction of transactions) {
     const convertedAmount = await currencyService.convertAmount(
       transaction.amount,
-      transaction.currency,
-      user.mainCurrency,
+      transaction.currencyCode,
+      user.mainCurrencyCode,
     );
 
     const existing = categoryMap.get(transaction.category) || {

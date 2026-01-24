@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { Currency } from '@prisma/client';
 
 export const updateProfileBodySchema = z.object({
   firstName: z.string().min(1).optional(),
@@ -16,7 +15,7 @@ export const updatePasswordBodySchema = z.object({
 type UpdatePasswordInput = z.infer<typeof updatePasswordBodySchema>;
 
 export const updateSettingsBodySchema = z.object({
-  mainCurrency: z.nativeEnum(Currency),
+  mainCurrencyCode: z.string().length(3),
 });
 
 type UpdateSettingsInput = z.infer<typeof updateSettingsBodySchema>;

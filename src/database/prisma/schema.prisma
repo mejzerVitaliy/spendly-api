@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
@@ -10,45 +10,6 @@ datasource db {
 
 enum TokenType {
   REFRESH
-}
-
-model User {
-  id                 String   @id @default(uuid()) @db.Uuid
-  email              String   @unique
-  firstName          String
-  lastName           String
-  password           String
-  avatarUrl          String?
-
-  totalBalance       Int      @default(0)
-
-  isTwoFactorEnabled Boolean  @default(false)
-  twoFactorCode      String?
-  twoFactorExpiresAt DateTime?
-
-  mainCurrency       Currency @default(USD)
-
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
-
-  tokens             Token[]
-  transactions       Transaction[]
-  dailySnapshots     DailyBalanceSnapshot[]
-
-  @@map("users")
-}
-
-model Token {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @map("user_id") @db.Uuid
-  token     String    @unique
-  type      TokenType
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@map("tokens")
 }
 
 enum Category {
@@ -69,10 +30,46 @@ enum TransactionType {
   EXPENSE
 }
 
-enum Currency {
-  USD
-  EUR
-  UAH
+model User {
+  id                 String   @id @default(uuid()) @db.Uuid
+  email              String   @unique
+  firstName          String
+  lastName           String
+  password           String
+  avatarUrl          String?
+
+  totalBalance       Int      @default(0)
+
+  isTwoFactorEnabled Boolean  @default(false)
+  twoFactorCode      String?
+  twoFactorExpiresAt DateTime?
+
+  mainCurrencyCode   String   @default("USD") @map("main_currency_code") @db.VarChar(3)
+  mainCurrency       Currency @relation(fields: [mainCurrencyCode], references: [code])
+
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  tokens             Token[]
+  transactions       Transaction[]
+  dailySnapshots     DailyBalanceSnapshot[]
+  favoriteCurrencies UserFavoriteCurrency[]
+
+  @@map("users")
+}
+
+model Token {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique
+  type      TokenType
+
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tokens")
 }
 
 model Transaction {
@@ -81,17 +78,20 @@ model Transaction {
 
   amount       Int       @default(0)
   date         DateTime
-  currency     Currency  @default(USD)
   description  String?
 
   category     Category
   type         TransactionType
+
+  currencyCode String    @default("USD") @map("currency_code") @db.VarChar(3)
+  currency     Currency @relation(fields: [currencyCode], references: [code])
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("transactions")
 }
 
@@ -102,22 +102,52 @@ model DailyBalanceSnapshot {
 
   openingBalance  Int
   closingBalance  Int
-  currency        Currency
+
+  currencyCode    String   @map("currency_code") @db.VarChar(3)
+  currency        Currency @relation(fields: [currencyCode], references: [code])
 
   totalIncome     Int      @default(0)
   totalExpense    Int      @default(0)
   netChange       Int      @default(0)
-  
+
   incomeCount     Int      @default(0)
   expenseCount    Int      @default(0)
-  
+
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
-  
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, date])
   @@index([userId, date])
   @@map("daily_balance_snapshots")
 }
 
+model Currency {
+  code   String @id @db.VarChar(3)
+  name   String
+
+  users                 User[]
+  transactions          Transaction[]
+  dailyBalanceSnapshots DailyBalanceSnapshot[]
+  favoritedBy           UserFavoriteCurrency[]
+
+  @@map("currencies")
+}
+
+model UserFavoriteCurrency {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  currencyCode String   @map("currency_code") @db.VarChar(3)
+
+  order        Int      @default(0)
+
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currency Currency @relation(fields: [currencyCode], references: [code], onDelete: Cascade)
+
+  @@unique([userId, currencyCode])
+  @@index([userId])
+  @@map("user_favorite_currencies")
+}

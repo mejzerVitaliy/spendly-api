@@ -1,4 +1,4 @@
-import { Currency, TransactionType } from '@prisma/client';
+import { TransactionType } from '@prisma/client';
 import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
 
@@ -21,7 +21,7 @@ type SummaryQuery = z.infer<typeof getReportsSummaryQuerySchema>;
 
 export const reportsSummarySchema = z.object({
   totalBalance: z.number(),
-  currency: z.nativeEnum(Currency),
+  currencyCode: z.string().length(3),
   totalIncome: z.number(),
   totalExpense: z.number(),
   netChange: z.number(),

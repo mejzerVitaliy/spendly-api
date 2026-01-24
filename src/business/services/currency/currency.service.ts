@@ -1,4 +1,5 @@
-import { BadRequestError } from '@/business/lib';
+import { BadRequestError, NotFoundError } from '@/business/lib';
+import { currencyRepository } from '@/database/repositories';
 import axios from 'axios';
 
 interface CurrencyRates {
@@ -113,9 +114,88 @@ const clearCache = (): void => {
   cache.clear();
 };
 
+const getAllCurrencies = async () => {
+  return await currencyRepository.findMany({});
+};
+
+const getCurrencyByCode = async (code: string) => {
+  const currency = await currencyRepository.findFirst({
+    where: {
+      code,
+    },
+  });
+
+  if (!currency) {
+    throw new NotFoundError(`Currency ${code} not found`);
+  }
+  return currency;
+};
+
+const getUserFavoriteCurrencies = async (userId: string) => {
+  return await currencyRepository.getUserFavoriteCurrencies(userId);
+};
+
+const addUserFavoriteCurrency = async (
+  userId: string,
+  currencyCode: string,
+) => {
+  const currency = await currencyRepository.findByCode(currencyCode);
+  if (!currency) {
+    throw new BadRequestError(`Currency ${currencyCode} not found`);
+  }
+
+  const count = await currencyRepository.countUserFavoriteCurrencies(userId);
+  if (count >= 5) {
+    throw new BadRequestError('Maximum 5 favorite currencies allowed');
+  }
+
+  return await currencyRepository.addUserFavoriteCurrency(
+    userId,
+    currencyCode,
+    count,
+  );
+};
+
+const removeUserFavoriteCurrency = async (
+  userId: string,
+  currencyCode: string,
+) => {
+  return await currencyRepository.removeUserFavoriteCurrency(
+    userId,
+    currencyCode,
+  );
+};
+
+const updateUserFavoriteCurrencies = async (
+  userId: string,
+  currencyCodes: string[],
+) => {
+  if (currencyCodes.length > 5) {
+    throw new BadRequestError('Maximum 5 favorite currencies allowed');
+  }
+
+  for (const code of currencyCodes) {
+    const currency = await currencyRepository.findByCode(code);
+    if (!currency) {
+      throw new BadRequestError(`Currency ${code} not found`);
+    }
+  }
+
+  return await currencyRepository.updateUserFavoriteCurrencies(
+    userId,
+    currencyCodes,
+  );
+};
+
 export const currencyService = {
   getExchangeRate,
   convertAmount,
   getAvailableCurrencies,
   clearCache,
+  getAllCurrencies,
+  getCurrencyByCode,
+  getUserFavoriteCurrencies,
+  addUserFavoriteCurrency,
+  removeUserFavoriteCurrency,
+  updateUserFavoriteCurrencies,
 };

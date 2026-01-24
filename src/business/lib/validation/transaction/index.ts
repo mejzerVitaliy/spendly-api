@@ -1,4 +1,4 @@
-import { Category, Currency, TransactionType } from '@prisma/client';
+import { Category, TransactionType } from '@prisma/client';
 import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
 
@@ -6,7 +6,7 @@ export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
   amount: z.number(),
   date: z.string().datetime(),
-  currency: z.nativeEnum(Currency),
+  currencyCode: z.string().length(3),
   description: z.string().optional(),
   category: z.nativeEnum(Category),
   type: z.nativeEnum(TransactionType),
@@ -15,7 +15,7 @@ export const transactionBaseSchema = z.object({
 export const createTransactionBodySchema = transactionBaseSchema.pick({
   amount: true,
   date: true,
-  currency: true,
+  currencyCode: true,
   description: true,
   category: true,
   type: true,

@@ -2,7 +2,7 @@ import {
   dailySnapshotRepository,
   userRepository,
 } from '@/database/repositories';
-import { TransactionType, Currency } from '@prisma/client';
+import { TransactionType } from '@prisma/client';
 import {
   NotFoundError,
   SnapshotFilters,
@@ -14,7 +14,7 @@ interface CreateSnapshotData {
   date: Date;
   amount: number;
   type: TransactionType;
-  currency: Currency;
+  currencyCode: string;
 }
 
 const createOrUpdateSnapshot = async (data: CreateSnapshotData) => {
@@ -46,7 +46,7 @@ const createOrUpdateSnapshot = async (data: CreateSnapshotData) => {
       normalizedDate,
       amount,
       type,
-      user.mainCurrency,
+      user.mainCurrencyCode,
     );
   }
 
@@ -100,7 +100,7 @@ const createNewSnapshot = async (
   date: Date,
   amount: number,
   type: TransactionType,
-  currency: Currency,
+  currencyCode: string,
 ) => {
   const previousSnapshot = await dailySnapshotRepository.findFirst({
     where: {
@@ -128,7 +128,7 @@ const createNewSnapshot = async (
       date,
       openingBalance,
       closingBalance,
-      currency,
+      currencyCode,
       totalIncome,
       totalExpense,
       netChange,
@@ -210,7 +210,7 @@ const getBalanceHistory = async (
     netChange: snapshot.netChange,
     incomeCount: snapshot.incomeCount,
     expenseCount: snapshot.expenseCount,
-    currency: snapshot.currency,
+    currencyCode: snapshot.currencyCode,
   }));
 };
 

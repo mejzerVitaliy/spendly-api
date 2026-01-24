@@ -1,4 +1,7 @@
-import { userRepository } from '@/database/repositories';
+import {
+  userRepository,
+  dailySnapshotRepository,
+} from '@/database/repositories';
 import { cloudinaryService } from '@/business/services';
 import {
   BadRequestError,
@@ -172,17 +175,47 @@ const updateSettings = async (id: string, data: UpdateSettingsInput) => {
     throw new BadRequestError('User not found');
   }
 
-  const convertedAmount = await currencyService.convertAmount(
+  if (user.mainCurrencyCode === data.mainCurrencyCode) {
+    return;
+  }
+
+  const oldCurrency = user.mainCurrencyCode;
+  const newCurrency = data.mainCurrencyCode;
+
+  const convertedBalance = await currencyService.convertAmount(
     user.totalBalance,
-    user.mainCurrency,
-    data.mainCurrency,
+    oldCurrency,
+    newCurrency,
   );
+
+  const snapshots = await dailySnapshotRepository.findMany({
+    where: { userId: id },
+  });
+
+  for (const snapshot of snapshots) {
+    const rate = await currencyService.getExchangeRate(
+      snapshot.currencyCode,
+      newCurrency,
+    );
+
+    await dailySnapshotRepository.update({
+      where: { id: snapshot.id },
+      data: {
+        openingBalance: Math.round(snapshot.openingBalance * rate),
+        closingBalance: Math.round(snapshot.closingBalance * rate),
+        totalIncome: Math.round(snapshot.totalIncome * rate),
+        totalExpense: Math.round(snapshot.totalExpense * rate),
+        netChange: Math.round(snapshot.netChange * rate),
+        currencyCode: newCurrency,
+      },
+    });
+  }
 
   await userRepository.update({
     where: { id },
     data: {
-      totalBalance: convertedAmount,
-      mainCurrency: data.mainCurrency,
+      totalBalance: Math.round(convertedBalance),
+      mainCurrencyCode: newCurrency,
     },
   });
 };

@@ -1,4 +1,3 @@
-import { Currency } from '@prisma/client';
 import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
 
@@ -10,7 +9,7 @@ export const dailySnapshotBaseSchema = z.object({
   // Балансы
   openingBalance: z.number(),
   closingBalance: z.number(),
-  currency: z.nativeEnum(Currency),
+  currencyCode: z.string().length(3),
 
   // Движения за день
   totalIncome: z.number(),
@@ -30,7 +29,7 @@ export const dailySnapshotPublicSchema = dailySnapshotBaseSchema.pick({
   date: true,
   openingBalance: true,
   closingBalance: true,
-  currency: true,
+  currencyCode: true,
   totalIncome: true,
   totalExpense: true,
   netChange: true,
@@ -70,7 +69,7 @@ export const periodStatisticsSchema = z.object({
   startingBalance: z.number(),
   endingBalance: z.number(),
   balanceChange: z.number(),
-  currency: z.nativeEnum(Currency),
+  currencyCode: z.string().length(3),
 
   // Суммарные движения
   totalIncome: z.number(),
@@ -132,7 +131,7 @@ export interface CreateSnapshotData {
   date: Date;
   openingBalance: number;
   closingBalance: number;
-  currency: Currency;
+  currencyCode: string;
   totalIncome: number;
   totalExpense: number;
   netChange: number;

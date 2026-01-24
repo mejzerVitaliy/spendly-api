@@ -30,8 +30,8 @@ const create = async (userId: string, input: CreateTransactionInput) => {
 
   const convertedAmount = await currencyService.convertAmount(
     transaction.amount,
-    transaction.currency,
-    user.mainCurrency,
+    transaction.currencyCode,
+    user.mainCurrencyCode,
   );
 
   let totalBalance;
@@ -54,7 +54,7 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     date: transaction.date,
     amount: convertedAmount,
     type: transaction.type,
-    currency: user.mainCurrency,
+    currencyCode: user.mainCurrencyCode,
   });
 
   return {
@@ -64,6 +64,14 @@ const create = async (userId: string, input: CreateTransactionInput) => {
 };
 
 const getAll = async (userId: string) => {
+  const user = await userRepository.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw NotFoundError('User not found');
+  }
+
   const transactions = await transactionRepository.findMany({
     where: {
       userId,
@@ -77,10 +85,24 @@ const getAll = async (userId: string) => {
     return [];
   }
 
-  return transactions.map((transaction) => ({
-    ...transaction,
-    date: transaction.date.toISOString(),
-  }));
+  const result = await Promise.all(
+    transactions.map(async (transaction) => {
+      const convertedAmount = await currencyService.convertAmount(
+        transaction.amount,
+        transaction.currencyCode,
+        user.mainCurrencyCode,
+      );
+
+      return {
+        ...transaction,
+        date: transaction.date.toISOString(),
+        convertedAmount: Math.round(convertedAmount),
+        mainCurrencyCode: user.mainCurrencyCode,
+      };
+    }),
+  );
+
+  return result;
 };
 
 const getById = async (userId: string, id: string) => {
@@ -98,9 +120,25 @@ const getById = async (userId: string, id: string) => {
     throw NotFoundError('Transaction not found');
   }
 
+  const user = await userRepository.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw NotFoundError('User not found');
+  }
+
+  const convertedAmount = await currencyService.convertAmount(
+    transaction.amount,
+    transaction.currencyCode,
+    user.mainCurrencyCode,
+  );
+
   return {
     ...transaction,
     date: transaction.date.toISOString(),
+    convertedAmount: Math.round(convertedAmount),
+    mainCurrencyCode: user.mainCurrencyCode,
   };
 };
 
@@ -121,8 +159,8 @@ const update = async (id: string, input: UpdateTransactionInput) => {
 
   const oldAmountConverted = await currencyService.convertAmount(
     transaction.amount,
-    transaction.currency,
-    user.mainCurrency,
+    transaction.currencyCode,
+    user.mainCurrencyCode,
   );
 
   let newBalance = user.totalBalance;
@@ -148,8 +186,8 @@ const update = async (id: string, input: UpdateTransactionInput) => {
 
   const finalAmountConverted = await currencyService.convertAmount(
     updatedTransaction.amount,
-    updatedTransaction.currency,
-    user.mainCurrency,
+    updatedTransaction.currencyCode,
+    user.mainCurrencyCode,
   );
 
   if (updatedTransaction.type === TransactionType.INCOME) {
@@ -175,7 +213,7 @@ const update = async (id: string, input: UpdateTransactionInput) => {
     date: updatedTransaction.date,
     amount: finalAmountConverted,
     type: updatedTransaction.type,
-    currency: user.mainCurrency,
+    currencyCode: user.mainCurrencyCode,
   });
 
   return {
@@ -209,8 +247,8 @@ const remove = async (id: string) => {
 
   const convertedAmount = await currencyService.convertAmount(
     transaction.amount,
-    transaction.currency,
-    user.mainCurrency,
+    transaction.currencyCode,
+    user.mainCurrencyCode,
   );
 
   let totalBalance;

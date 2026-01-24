@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
-import { Currency } from '@prisma/client';
 
 const passwordSchema = z.string().min(6, {
   message: 'Password must be at least 6 characters long',
@@ -13,7 +12,7 @@ export const baseUserSchema = z.object({
   lastName: z.string(),
   avatarUrl: z.string().optional(),
   isTwoFactorEnabled: z.boolean(),
-  mainCurrency: z.nativeEnum(Currency),
+  mainCurrencyCode: z.string().length(3),
   totalBalance: z.number(),
 });
 
