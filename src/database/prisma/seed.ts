@@ -1,6 +1,182 @@
-import { PrismaClient } from '@prisma/client';
+import { TransactionType, PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+
+const categories = [
+  { name: 'Salary', color: '#16A34A', type: TransactionType.INCOME, order: 1 },
+  {
+    name: 'Freelance',
+    color: '#4ADE80',
+    type: TransactionType.INCOME,
+    order: 2,
+  },
+  { name: 'Bonus', color: '#22C55E', type: TransactionType.INCOME, order: 3 },
+  {
+    name: 'Side Hustle',
+    color: '#10B981',
+    type: TransactionType.INCOME,
+    order: 4,
+  },
+  {
+    name: 'Investments',
+    color: '#0EA5E9',
+    type: TransactionType.INCOME,
+    order: 5,
+  },
+  {
+    name: 'Dividends',
+    color: '#0284C7',
+    type: TransactionType.INCOME,
+    order: 6,
+  },
+  {
+    name: 'Interest',
+    color: '#0369A1',
+    type: TransactionType.INCOME,
+    order: 7,
+  },
+  { name: 'Refunds', color: '#8B5CF6', type: TransactionType.INCOME, order: 8 },
+  {
+    name: 'Gifts Received',
+    color: '#EC4899',
+    type: TransactionType.INCOME,
+    order: 9,
+  },
+  { name: 'Food', color: '#22C55E', type: TransactionType.EXPENSE, order: 10 },
+  { name: 'Rent', color: '#EF4444', type: TransactionType.EXPENSE, order: 11 },
+  {
+    name: 'Utilities',
+    color: '#F97316',
+    type: TransactionType.EXPENSE,
+    order: 12,
+  },
+  {
+    name: 'Transportation',
+    color: '#14B8A6',
+    type: TransactionType.EXPENSE,
+    order: 13,
+  },
+  {
+    name: 'Public Transport',
+    color: '#0F766E',
+    type: TransactionType.EXPENSE,
+    order: 14,
+  },
+  {
+    name: 'Taxi / Ride Sharing',
+    color: '#2DD4BF',
+    type: TransactionType.EXPENSE,
+    order: 15,
+  },
+  {
+    name: 'Car Maintenance',
+    color: '#7C2D12',
+    type: TransactionType.EXPENSE,
+    order: 16,
+  },
+  {
+    name: 'Parking',
+    color: '#9CA3AF',
+    type: TransactionType.EXPENSE,
+    order: 17,
+  },
+  {
+    name: 'Doctor / Medical',
+    color: '#DB2777',
+    type: TransactionType.EXPENSE,
+    order: 18,
+  },
+  {
+    name: 'Pharmacy',
+    color: '#EC4899',
+    type: TransactionType.EXPENSE,
+    order: 19,
+  },
+  { name: 'Gym', color: '#7C3AED', type: TransactionType.EXPENSE, order: 20 },
+  {
+    name: 'Clothing',
+    color: '#8B5CF6',
+    type: TransactionType.EXPENSE,
+    order: 21,
+  },
+  { name: 'Shoes', color: '#7C3AED', type: TransactionType.EXPENSE, order: 22 },
+  {
+    name: 'Home Goods',
+    color: '#3B82F6',
+    type: TransactionType.EXPENSE,
+    order: 23,
+  },
+  { name: 'Gifts', color: '#F472B6', type: TransactionType.EXPENSE, order: 24 },
+  {
+    name: 'Subscriptions',
+    color: '#6366F1',
+    type: TransactionType.EXPENSE,
+    order: 25,
+  },
+  {
+    name: 'Software / Cloud Services',
+    color: '#0284C7',
+    type: TransactionType.EXPENSE,
+    order: 26,
+  },
+  {
+    name: 'Education',
+    color: '#14B8A6',
+    type: TransactionType.EXPENSE,
+    order: 27,
+  },
+  {
+    name: 'Online Courses',
+    color: '#22D3EE',
+    type: TransactionType.EXPENSE,
+    order: 28,
+  },
+  { name: 'Books', color: '#0D9488', type: TransactionType.EXPENSE, order: 29 },
+  {
+    name: 'Entertainment',
+    color: '#F472B6',
+    type: TransactionType.EXPENSE,
+    order: 30,
+  },
+  {
+    name: 'Travel',
+    color: '#38BDF8',
+    type: TransactionType.EXPENSE,
+    order: 31,
+  },
+  {
+    name: 'Events',
+    color: '#F0ABFC',
+    type: TransactionType.EXPENSE,
+    order: 32,
+  },
+  { name: 'Taxes', color: '#991B1B', type: TransactionType.EXPENSE, order: 33 },
+  {
+    name: 'Loan / Credit Payments',
+    color: '#B91C1C',
+    type: TransactionType.EXPENSE,
+    order: 34,
+  },
+  {
+    name: 'Bank Fees',
+    color: '#7F1D1D',
+    type: TransactionType.EXPENSE,
+    order: 35,
+  },
+  { name: 'Pets', color: '#A855F7', type: TransactionType.EXPENSE, order: 36 },
+  {
+    name: 'Charity',
+    color: '#22C55E',
+    type: TransactionType.EXPENSE,
+    order: 37,
+  },
+  {
+    name: 'Unexpected Expenses',
+    color: '#6B7280',
+    type: TransactionType.EXPENSE,
+    order: 38,
+  },
+];
 
 const currencies = [
   { code: 'AED', name: 'United Arab Emirates Dirham' },
@@ -167,6 +343,22 @@ async function main() {
   });
 
   console.log(`✅ Seeded ${currencies.length} currencies`);
+
+  console.log('🌱 Seeding categories...');
+
+  for (const category of categories) {
+    await prisma.category.upsert({
+      where: { name: category.name },
+      update: {
+        color: category.color,
+        type: category.type,
+        order: category.order,
+      },
+      create: category,
+    });
+  }
+
+  console.log(`✅ Seeded ${categories.length} categories`);
 }
 
 main()

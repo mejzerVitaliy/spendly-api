@@ -2,17 +2,47 @@ import {
   CreateTransactionInput,
   NotFoundError,
   UpdateTransactionInput,
+  BadRequestError,
 } from '@/business/lib';
-import { transactionRepository, userRepository } from '@/database/repositories';
+import {
+  transactionRepository,
+  userRepository,
+  walletRepository,
+} from '@/database/repositories';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
 
 const create = async (userId: string, input: CreateTransactionInput) => {
+  let walletId = input.walletId;
+
+  if (!walletId) {
+    const defaultWallet = await walletRepository.findFirst({
+      where: { userId, isDefault: true, isArchived: false },
+    });
+
+    if (!defaultWallet) {
+      throw new BadRequestError(
+        'No default wallet found. Please create a wallet first.',
+      );
+    }
+
+    walletId = defaultWallet.id;
+  } else {
+    const wallet = await walletRepository.findFirst({
+      where: { id: walletId, userId, isArchived: false },
+    });
+
+    if (!wallet) {
+      throw new BadRequestError('Wallet not found or is archived');
+    }
+  }
+
   const transaction = await transactionRepository.create({
     data: {
       userId,
       ...input,
+      walletId,
     },
   });
 

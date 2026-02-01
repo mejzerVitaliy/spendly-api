@@ -5,6 +5,8 @@ import { transactionRoutes } from './transaction';
 import { profileRoutes } from './profile';
 import { reportsRoutes } from './reports';
 import { currencyRoute } from './currency';
+import { categoryRoute } from './category';
+import { walletRoutes } from './wallet';
 
 const configureRoutes = async (fastify: FastifyInstance) => {
   await fastify.register(applicationRoutes, {
@@ -29,6 +31,14 @@ const configureRoutes = async (fastify: FastifyInstance) => {
 
   await fastify.register(currencyRoute, {
     prefix: 'api/currency',
+  });
+
+  await fastify.register(categoryRoute, {
+    prefix: 'api/category',
+  });
+
+  await fastify.register(walletRoutes, {
+    prefix: 'api/wallet',
   });
 };
 

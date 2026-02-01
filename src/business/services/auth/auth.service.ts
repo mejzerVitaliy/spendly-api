@@ -14,6 +14,7 @@ import {
 } from '@/business/lib';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
+import { walletService } from '@/business/services/wallet';
 import { TokenType } from '@prisma/client';
 import { emailService } from '@/bootstrap/email';
 
@@ -46,6 +47,11 @@ const register = async (user: RegisterInput) => {
       avatarUrl: '',
     },
   });
+
+  await walletService.createDefaultWallet(
+    createdUser.id,
+    createdUser.mainCurrencyCode,
+  );
 
   await emailService.sendWelcomeEmail(createdUser.email);
 

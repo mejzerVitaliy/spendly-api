@@ -13,7 +13,6 @@ import {
 } from '@/database/repositories';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
-import { COLOR_BY_CATEGORY } from '@/constans';
 
 const formatDateLabel = (dateStr: string): string => {
   const date = new Date(dateStr);
@@ -171,6 +170,9 @@ const getCategoryBarChartData = async (
         lte: endDate ? new Date(endDate) : undefined,
       },
     },
+    include: {
+      category: true,
+    },
   });
 
   const categoryMap = new Map<string, { amount: number; count: number }>();
@@ -183,11 +185,12 @@ const getCategoryBarChartData = async (
       user.mainCurrencyCode,
     );
 
-    const existing = categoryMap.get(transaction.category) || {
+    const categoryName = transaction.category?.name || 'Unknown';
+    const existing = categoryMap.get(categoryName) || {
       amount: 0,
       count: 0,
     };
-    categoryMap.set(transaction.category, {
+    categoryMap.set(categoryName, {
       amount: existing.amount + convertedAmount,
       count: existing.count + 1,
     });
@@ -237,9 +240,15 @@ const getCategoryPieChartData = async (
         lte: endDate ? new Date(endDate) : undefined,
       },
     },
+    include: {
+      category: true,
+    },
   });
 
-  const categoryMap = new Map<string, { amount: number; count: number }>();
+  const categoryMap = new Map<
+    string,
+    { amount: number; count: number; color: string }
+  >();
   let totalExpenses = 0;
 
   for (const transaction of transactions) {
@@ -249,13 +258,17 @@ const getCategoryPieChartData = async (
       user.mainCurrencyCode,
     );
 
-    const existing = categoryMap.get(transaction.category) || {
+    const categoryName = transaction.category?.name || 'Unknown';
+    const categoryColor = transaction.category?.color || '#6B7280';
+    const existing = categoryMap.get(categoryName) || {
       amount: 0,
       count: 0,
+      color: categoryColor,
     };
-    categoryMap.set(transaction.category, {
+    categoryMap.set(categoryName, {
       amount: existing.amount + convertedAmount,
       count: existing.count + 1,
+      color: categoryColor,
     });
     totalExpenses += convertedAmount;
   }
@@ -265,7 +278,7 @@ const getCategoryPieChartData = async (
       return {
         value:
           totalExpenses > 0 ? (categoryData.amount / totalExpenses) * 100 : 0,
-        color: COLOR_BY_CATEGORY[category as keyof typeof COLOR_BY_CATEGORY],
+        color: categoryData.color,
         label: category,
         focused: index === 0,
       };
