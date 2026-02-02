@@ -5,3 +5,5 @@ export * from './profile';
 export * from './snapshot';
 export * from './reports';
 export * from './currency';
+export * from './category';
+export * from './wallet';

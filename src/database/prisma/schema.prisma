@@ -12,22 +12,17 @@ enum TokenType {
   REFRESH
 }
 
-enum Category {
-  SALARY
-  GIFT
-  INVESTMENT
-  FOOD
-  TRANSPORT
-  HOUSING
-  UTILITIES
-  HEALTH
-  HOBBY
-  OTHER
-}
-
 enum TransactionType {
   INCOME
   EXPENSE
+}
+
+enum WalletType {
+  CASH
+  DEBIT_CARD
+  CREDIT_CARD
+  SAVINGS
+  CUSTOM
 }
 
 model User {
@@ -54,6 +49,8 @@ model User {
   transactions       Transaction[]
   dailySnapshots     DailyBalanceSnapshot[]
   favoriteCurrencies UserFavoriteCurrency[]
+  favoriteCategories UserFavoriteCategory[]
+  wallets            Wallet[]
 
   @@map("users")
 }
@@ -80,8 +77,12 @@ model Transaction {
   date         DateTime
   description  String?
 
-  category     Category
+  categoryId   String    @map("category_id") @db.Uuid
+  category     Category  @relation(fields: [categoryId], references: [id])
   type         TransactionType
+
+  walletId     String    @map("wallet_id") @db.Uuid
+  wallet       Wallet    @relation(fields: [walletId], references: [id])
 
   currencyCode String    @default("USD") @map("currency_code") @db.VarChar(3)
   currency     Currency @relation(fields: [currencyCode], references: [code])
@@ -92,7 +93,32 @@ model Transaction {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([walletId])
   @@map("transactions")
+}
+
+model Wallet {
+  id             String     @id @default(uuid()) @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  name           String
+  type           WalletType @default(CASH)
+  
+  currencyCode   String     @map("currency_code") @db.VarChar(3)
+  currency       Currency   @relation(fields: [currencyCode], references: [code])
+  
+  initialBalance Int        @default(0) @map("initial_balance")
+  isDefault      Boolean    @default(false) @map("is_default")
+  isArchived     Boolean    @default(false) @map("is_archived")
+
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+
+  @@unique([userId, name])
+  @@index([userId])
+  @@map("wallets")
 }
 
 model DailyBalanceSnapshot {
@@ -131,6 +157,7 @@ model Currency {
   transactions          Transaction[]
   dailyBalanceSnapshots DailyBalanceSnapshot[]
   favoritedBy           UserFavoriteCurrency[]
+  wallets               Wallet[]
 
   @@map("currencies")
 }
@@ -150,4 +177,34 @@ model UserFavoriteCurrency {
   @@unique([userId, currencyCode])
   @@index([userId])
   @@map("user_favorite_currencies")
+}
+
+model Category {
+  id     String       @id @default(uuid()) @db.Uuid
+  name   String       @unique
+  color  String
+  type   TransactionType
+  order  Int          @default(0)
+
+  transactions   Transaction[]
+  favoritedBy    UserFavoriteCategory[]
+
+  @@map("categories")
+}
+
+model UserFavoriteCategory {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  categoryId String   @map("category_id") @db.Uuid
+
+  order      Int      @default(0)
+
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+  @@index([userId])
+  @@map("user_favorite_categories")
 }
