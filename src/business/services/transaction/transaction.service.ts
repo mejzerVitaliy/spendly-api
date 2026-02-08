@@ -93,7 +93,15 @@ const create = async (userId: string, input: CreateTransactionInput) => {
   };
 };
 
-const getAll = async (userId: string) => {
+interface GetAllTransactionsParams {
+  userId: string;
+  startDate?: string;
+  endDate?: string;
+  search?: string;
+}
+
+const getAll = async (params: GetAllTransactionsParams) => {
+  const { userId, startDate, endDate, search } = params;
   const user = await userRepository.findUnique({
     where: { id: userId },
   });
@@ -102,12 +110,43 @@ const getAll = async (userId: string) => {
     throw NotFoundError('User not found');
   }
 
+  const whereConditions: any = {
+    userId,
+  };
+
+  if (startDate && endDate) {
+    whereConditions.date = {
+      gte: new Date(startDate),
+      lte: new Date(endDate),
+    };
+  }
+
+  if (search) {
+    whereConditions.OR = [
+      {
+        description: {
+          contains: search,
+          mode: 'insensitive',
+        },
+      },
+      {
+        category: {
+          name: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      },
+    ];
+  }
+
   const transactions = await transactionRepository.findMany({
-    where: {
-      userId,
+    where: whereConditions,
+    include: {
+      category: true,
     },
     orderBy: {
-      date: 'asc',
+      date: 'desc',
     },
   });
 
@@ -123,12 +162,19 @@ const getAll = async (userId: string) => {
         user.mainCurrencyCode,
       );
 
-      return {
+      const resultTransaction = {
         ...transaction,
         date: transaction.date.toISOString(),
         convertedAmount: Math.round(convertedAmount),
         mainCurrencyCode: user.mainCurrencyCode,
       };
+
+      console.log(
+        'Transaction with category:',
+        JSON.stringify(resultTransaction, null, 2),
+      );
+
+      return resultTransaction;
     }),
   );
 
@@ -139,6 +185,9 @@ const getById = async (userId: string, id: string) => {
   const transaction = await transactionRepository.findUnique({
     where: {
       id,
+    },
+    include: {
+      category: true,
     },
   });
 
@@ -228,7 +277,15 @@ const update = async (id: string, input: UpdateTransactionInput) => {
 
   await transactionRepository.update({
     where: { id },
-    data: updatedTransaction,
+    data: {
+      description: updatedTransaction.description,
+      amount: updatedTransaction.amount,
+      type: updatedTransaction.type,
+      date: updatedTransaction.date,
+      categoryId: updatedTransaction.categoryId,
+      currencyCode: updatedTransaction.currencyCode,
+      walletId: updatedTransaction.walletId,
+    },
   });
 
   await userRepository.update({
