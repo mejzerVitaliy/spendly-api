@@ -22,10 +22,25 @@ const create = async (
   reply.send(response);
 };
 
-const getAll = async (req: FastifyRequest, reply: FastifyReply) => {
+const getAll = async (
+  req: FastifyRequest<{
+    Querystring: {
+      startDate?: string;
+      endDate?: string;
+      search?: string;
+    };
+  }>,
+  reply: FastifyReply,
+) => {
   const { userId } = req.user as JwtPayload;
+  const { startDate, endDate, search } = req.query;
 
-  const transactions = await transactionService.getAll(userId);
+  const transactions = await transactionService.getAll({
+    userId,
+    startDate,
+    endDate,
+    search,
+  });
 
   const response = {
     message: 'Transactions fetched successfully',

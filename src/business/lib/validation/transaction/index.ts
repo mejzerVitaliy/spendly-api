@@ -13,6 +13,8 @@ export const transactionBaseSchema = z.object({
   category: categorySchema.optional(),
   walletId: z.string().uuid(),
   type: z.nativeEnum(TransactionType),
+  convertedAmount: z.number().optional(),
+  mainCurrencyCode: z.string().length(3).optional(),
 });
 
 export const createTransactionBodySchema = z.object({
