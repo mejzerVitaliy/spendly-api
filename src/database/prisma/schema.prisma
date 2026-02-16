@@ -8,6 +8,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserType {
+  GUEST
+  REGISTERED
+}
+
 enum TokenType {
   REFRESH
 }
@@ -27,11 +32,11 @@ enum WalletType {
 
 model User {
   id                 String   @id @default(uuid()) @db.Uuid
-  email              String   @unique
-  firstName          String
-  lastName           String
-  password           String
+  type               UserType @default(GUEST)
+  email              String?  @unique
+  password           String?
   avatarUrl          String?
+  onboardingCompleted Boolean @default(false) @map("onboarding_completed")
 
   totalBalance       Int      @default(0)
 

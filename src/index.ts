@@ -6,7 +6,7 @@ import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
 import { environmentVariables } from './config';
 import { initPrismaProxy, prisma } from './database/prisma/prisma';
 import { configureRoutes } from './routes';
-import { configureJwt, configureMultipart, emailService } from './bootstrap';
+import { configureJwt, configureMultipart } from './bootstrap';
 
 async function main() {
   const fastify = Fastify({

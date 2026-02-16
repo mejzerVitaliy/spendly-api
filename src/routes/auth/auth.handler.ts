@@ -1,17 +1,66 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import {
+  GuestInput,
   LoginInput,
-  LoginTwoFactorInput,
-  LoginTwoFactorResendInput,
   RefreshTokenInput,
   RefreshTokenResponse,
   RegisterInput,
   UnauthorizedError,
+  UpgradeGuestInput,
 } from '@/business';
 import { authService } from '@/business/services/auth/auth.service';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
 import { TokenType } from '@prisma/client';
+
+const guest = async (
+  req: FastifyRequest<{
+    Body: GuestInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { body } = req;
+
+  const { createdUser, accessToken, refreshToken } =
+    await authService.createGuest(body);
+
+  const response = {
+    message: 'Guest user created successfully',
+    data: {
+      user: createdUser,
+      accessToken,
+      refreshToken,
+    },
+  };
+
+  reply.send(response);
+};
+
+const upgradeGuest = async (
+  req: FastifyRequest<{
+    Body: UpgradeGuestInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { body } = req;
+
+  const { user, accessToken, refreshToken } = await authService.upgradeGuest(
+    userId,
+    body,
+  );
+
+  const response = {
+    message: 'Guest upgraded to registered user successfully',
+    data: {
+      user,
+      accessToken,
+      refreshToken,
+    },
+  };
+
+  reply.send(response);
+};
 
 const register = async (
   req: FastifyRequest<{
@@ -49,56 +98,6 @@ const login = async (
   const response = {
     message: 'User is logged in successfully',
     data,
-  };
-
-  reply.send(response);
-};
-
-const loginTwoFactor = async (
-  request: FastifyRequest<{
-    Body: LoginTwoFactorInput;
-  }>,
-  reply: FastifyReply,
-) => {
-  const { body } = request;
-
-  const data = await authService.loginTwoFactor(body);
-
-  const response = {
-    message: 'User is logged in successfully with two-factor authentication',
-    data,
-  };
-
-  reply.send(response);
-};
-
-const loginTwoFactorResend = async (
-  request: FastifyRequest<{
-    Body: LoginTwoFactorResendInput;
-  }>,
-  reply: FastifyReply,
-) => {
-  const { body } = request;
-
-  const data = await authService.loginTwoFactorResend(body);
-
-  const response = {
-    message: 'Two-factor authentication code is resent successfully',
-  };
-
-  reply.send(response);
-};
-
-const toggleTwoFactor = async (
-  request: FastifyRequest,
-  reply: FastifyReply,
-) => {
-  const { userId } = request.user as JwtPayload;
-
-  await authService.toggleTwoFactor(userId);
-
-  const response = {
-    message: 'Two-factor authentication is toggled successfully',
   };
 
   reply.send(response);
@@ -156,11 +155,10 @@ const logout = async (request: FastifyRequest, reply: FastifyReply) => {
 };
 
 export const authHandler = {
+  guest,
+  upgradeGuest,
   register,
   login,
-  loginTwoFactor,
-  loginTwoFactorResend,
-  toggleTwoFactor,
   getMe,
   refresh,
   logout,
