@@ -1,20 +1,52 @@
 import { FastifyInstance } from 'fastify';
 import {
   getMeResponseSchema,
+  guestBodySchema,
+  guestResponseSchema,
   loginBodySchema,
   loginResponseSchema,
-  loginTwoFactorBodySchema,
-  loginTwoFactorResendBodySchema,
-  loginTwoFactorResponseSchema,
   messageResponseSchema,
   refreshTokenBodySchema,
   refreshTokenResponseSchema,
   registerBodySchema,
   registerResponseSchema,
+  upgradeGuestBodySchema,
+  upgradeGuestResponseSchema,
 } from '../../business';
 import { authHandler } from './auth.handler';
 
 export const authRoutes = async (fastify: FastifyInstance) => {
+  fastify.post(
+    '/guest',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Create a guest user with onboarding data',
+        body: guestBodySchema,
+        response: {
+          200: guestResponseSchema,
+        },
+      },
+    },
+    authHandler.guest,
+  );
+
+  fastify.post(
+    '/upgrade',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['auth'],
+        summary: 'Upgrade guest user to registered user',
+        body: upgradeGuestBodySchema,
+        response: {
+          200: upgradeGuestResponseSchema,
+        },
+      },
+    },
+    authHandler.upgradeGuest,
+  );
+
   fastify.post(
     '/register',
     {
@@ -43,51 +75,6 @@ export const authRoutes = async (fastify: FastifyInstance) => {
       },
     },
     authHandler.login,
-  );
-
-  fastify.post(
-    '/login/two-factor',
-    {
-      schema: {
-        tags: ['auth'],
-        summary: 'Login a user with two-factor authentication',
-        body: loginTwoFactorBodySchema,
-        response: {
-          200: loginTwoFactorResponseSchema,
-        },
-      },
-    },
-    authHandler.loginTwoFactor,
-  );
-
-  fastify.post(
-    '/login/two-factor/resend',
-    {
-      schema: {
-        tags: ['auth'],
-        summary: 'Resend two-factor authentication code',
-        body: loginTwoFactorResendBodySchema,
-        response: {
-          200: messageResponseSchema,
-        },
-      },
-    },
-    authHandler.loginTwoFactorResend,
-  );
-
-  fastify.put(
-    '/toggle-two-factor',
-    {
-      preHandler: fastify.authenticate,
-      schema: {
-        tags: ['auth'],
-        summary: 'Toggle two-factor authentication',
-        response: {
-          200: messageResponseSchema,
-        },
-      },
-    },
-    authHandler.toggleTwoFactor,
   );
 
   fastify.get(

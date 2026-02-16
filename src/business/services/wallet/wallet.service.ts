@@ -349,14 +349,18 @@ const calculateWalletBalance = async (
   return balance;
 };
 
-const createDefaultWallet = async (userId: string, currencyCode: string) => {
+const createDefaultWallet = async (
+  userId: string,
+  currencyCode: string,
+  initialBalance = 0,
+) => {
   const wallet = await walletRepository.create({
     data: {
       userId,
       name: 'Main Wallet',
       currencyCode,
       type: WalletType.CASH,
-      initialBalance: 0,
+      initialBalance,
       isDefault: true,
       isArchived: false,
     },
@@ -364,7 +368,7 @@ const createDefaultWallet = async (userId: string, currencyCode: string) => {
 
   return {
     ...wallet,
-    currentBalance: 0,
+    currentBalance: initialBalance,
     createdAt: wallet.createdAt.toISOString(),
     updatedAt: wallet.updatedAt.toISOString(),
   };

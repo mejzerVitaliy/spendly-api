@@ -17,9 +17,9 @@ services:
     container_name: spendly
     restart: always
     dns:
-      - 8.8.8.8      # Google DNS
-      - 8.8.4.4      # Google DNS backup
-      - 1.1.1.1      # Cloudflare DNS
+      - 8.8.8.8 # Google DNS
+      - 8.8.4.4 # Google DNS backup
+      - 1.1.1.1 # Cloudflare DNS
     ports:
       - '${PORT}:5000'
     depends_on:
