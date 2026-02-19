@@ -7,6 +7,7 @@ import {
   getTransactionByIdResponseSchema,
   parseTextTransactionBodySchema,
   parseTextTransactionResponseSchema,
+  parseVoiceTransactionResponseSchema,
   updateTransactionResponseSchema,
 } from '@/business';
 import { messageResponseSchema } from '@/business/lib';
@@ -57,6 +58,21 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.createFromText,
+  );
+
+  fastify.post(
+    '/parse-voice',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Create transactions from voice recording using AI',
+        response: {
+          200: parseVoiceTransactionResponseSchema,
+        },
+      },
+    },
+    transactionHandler.createFromVoice,
   );
 
   fastify.get(

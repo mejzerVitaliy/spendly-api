@@ -10,7 +10,11 @@ import {
   userRepository,
   walletRepository,
 } from '@/database/repositories';
-import { parseTextTransaction } from '@/bootstrap/openai';
+import {
+  normalizeVoiceText,
+  parseTextTransaction,
+  transcribeAudio,
+} from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
@@ -437,9 +441,28 @@ const createFromText = async (userId: string, text: string) => {
   return created;
 };
 
+const createFromVoice = async (
+  userId: string,
+  audioBuffer: Buffer,
+  filename: string,
+) => {
+  const transcribedText = await transcribeAudio(audioBuffer, filename);
+
+  const normalized = await normalizeVoiceText(transcribedText);
+
+  if (!normalized.success || !normalized.normalizedText) {
+    throw new BadRequestError(
+      normalized.error ?? 'Failed to understand voice input. Please try again.',
+    );
+  }
+
+  return createFromText(userId, normalized.normalizedText);
+};
+
 export const transactionService = {
   create,
   createFromText,
+  createFromVoice,
   getAll,
   getById,
   update,
