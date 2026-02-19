@@ -27,6 +27,8 @@ steps:
       - "--platform=managed"
       - "--image=$_AR_DOCKER_IMAGE_URI:latest"
       - "--region=$_DEPLOY_REGION"
+      - "--set-env-vars=NODE_ENV=production"
+      - "--set-secrets=APPLICATION_SECRET=dev-spendly-api-application_secret:latest,RESEND_API_KEY=dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=dev-spendly-db-database_url:latest"
       - "--quiet"
 
   - name: "gcr.io/cloud-builders/docker"
