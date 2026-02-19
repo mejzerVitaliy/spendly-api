@@ -17,6 +17,18 @@ steps:
       - "$_AR_DOCKER_IMAGE_URI:latest"
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: ClearSecrets
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        gcloud run services update $_SERVICE_NAME \
+          --platform=managed \
+          --region=$_DEPLOY_REGION \
+          --remove-secrets=APPLICATION_SECRET,RESEND_API_KEY,OPENAI_API_KEY,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,DATABASE_URL \
+          --quiet || true
+
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
     id: Deploy
     entrypoint: gcloud
     args:
