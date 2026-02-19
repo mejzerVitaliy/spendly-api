@@ -5,7 +5,8 @@ steps:
       - build
       - "--no-cache"
       - "-t"
-      - "$_AR_DOCKER_IMAGE_URI:latest"
+      - >-
+        $_AR_DOCKER_IMAGE_URI:latest
       - .
       - "-f"
       - Dockerfile
@@ -14,19 +15,8 @@ steps:
     id: Push
     args:
       - push
-      - "$_AR_DOCKER_IMAGE_URI:latest"
-
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
-    id: ClearSecrets
-    entrypoint: bash
-    args:
-      - "-c"
-      - |
-        gcloud run services update $_SERVICE_NAME \
-          --platform=managed \
-          --region=$_DEPLOY_REGION \
-          --remove-secrets=APPLICATION_SECRET,RESEND_API_KEY,OPENAI_API_KEY,CLOUDINARY_CLOUD_NAME,CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,DATABASE_URL \
-          --quiet || true
+      - >-
+        $_AR_DOCKER_IMAGE_URI:latest
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
     id: Deploy
@@ -37,11 +27,35 @@ steps:
       - update
       - $_SERVICE_NAME
       - "--platform=managed"
-      - "--image=$_AR_DOCKER_IMAGE_URI:latest"
+      - >-
+        --image=$_AR_DOCKER_IMAGE_URI:latest
       - "--region=$_DEPLOY_REGION"
+      - "--timeout=300"
+      - "--cpu-boost"
+      - "--max-instances=10"
+      - "--min-instances=0"
       - "--set-env-vars=NODE_ENV=production,APPLICATION_URL=$_APPLICATION_URL,FRONTEND_URL=$_FRONTEND_URL"
       - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
       - "--quiet"
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: start-cloudsql-proxy
+    entrypoint: bash
+    args:
+      - "-c"
+      - docker run -d --name gce-cloudsql-proxy --user root --network cloudbuild --volume /workspace/cloudsql:/cloudsql gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --unix-socket /cloudsql --run-connection-test $_CLOUD_SQL_INSTANCE
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: check-cloudsql-logs
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        echo "Waiting for Cloud SQL Proxy to initialize..."
+        sleep 5
+        docker logs gce-cloudsql-proxy || echo 'No logs found for gce-cloudsql-proxy'
+        echo "Checking socket file..."
+        ls -la /workspace/cloudsql/ || echo "Socket directory not found"
 
   - name: "node:22"
     id: install-dependencies
@@ -51,24 +65,10 @@ steps:
   - name: "node:22"
     id: SeedDatabase
     entrypoint: bash
-    env:
-      - "CLOUD_SQL_INSTANCE=$_CLOUD_SQL_INSTANCE"
     args:
       - "-c"
       - |
-        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64 -O /usr/local/bin/cloud-sql-proxy
-        chmod +x /usr/local/bin/cloud-sql-proxy
-        mkdir -p /cloudsql
-        cloud-sql-proxy --unix-socket=/cloudsql "$CLOUD_SQL_INSTANCE" &
-        echo "Waiting for Cloud SQL socket at /cloudsql/$CLOUD_SQL_INSTANCE ..."
-        for i in $(seq 1 30); do
-          if [ -S "/cloudsql/$CLOUD_SQL_INSTANCE" ]; then
-            echo "Socket ready after ${i}s"
-            break
-          fi
-          sleep 1
-        done
-        ls -la /cloudsql/ || true
+        ln -s /workspace/cloudsql /cloudsql
         npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
