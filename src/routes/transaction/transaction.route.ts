@@ -5,6 +5,8 @@ import {
   createTransactionResponseSchema,
   getAllTransactionsResponseSchema,
   getTransactionByIdResponseSchema,
+  parseTextTransactionBodySchema,
+  parseTextTransactionResponseSchema,
   updateTransactionResponseSchema,
 } from '@/business';
 import { messageResponseSchema } from '@/business/lib';
@@ -39,6 +41,22 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.getAll,
+  );
+
+  fastify.post(
+    '/parse-text',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Create a transaction from text using AI',
+        body: parseTextTransactionBodySchema,
+        response: {
+          200: parseTextTransactionResponseSchema,
+        },
+      },
+    },
+    transactionHandler.createFromText,
   );
 
   fastify.get(

@@ -1,4 +1,8 @@
-import { CreateTransactionInput, UpdateTransactionInput } from '@/business';
+import {
+  CreateTransactionInput,
+  ParseTextTransactionInput,
+  UpdateTransactionInput,
+} from '@/business';
 import { transactionService } from '@/business/services/transaction';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
@@ -112,8 +116,28 @@ const remove = async (
   reply.send(response);
 };
 
+const createFromText = async (
+  req: FastifyRequest<{
+    Body: ParseTextTransactionInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { text } = req.body;
+
+  const transactions = await transactionService.createFromText(userId, text);
+
+  const response = {
+    message: 'Transactions created from text successfully',
+    data: transactions,
+  };
+
+  reply.send(response);
+};
+
 export const transactionHandler = {
   create,
+  createFromText,
   getAll,
   getById,
   update,

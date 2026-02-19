@@ -49,4 +49,18 @@ export const updateTransactionResponseSchema = createResponseWithDataSchema(
   transactionBaseSchema,
 );
 
-export type { CreateTransactionInput, UpdateTransactionInput };
+export const parseTextTransactionBodySchema = z.object({
+  text: z.string().min(1),
+});
+
+type ParseTextTransactionInput = z.infer<typeof parseTextTransactionBodySchema>;
+
+export const parseTextTransactionResponseSchema = createResponseWithDataSchema(
+  z.array(transactionBaseSchema),
+);
+
+export type {
+  CreateTransactionInput,
+  UpdateTransactionInput,
+  ParseTextTransactionInput,
+};
