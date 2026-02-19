@@ -48,25 +48,22 @@ steps:
           --secret=dev-spendly-db-seed_database_url \
           --project=tokyo-hydra-464314-a0 >> /workspace/.db_url
 
-  - name: "gcr.io/cloud-builders/docker"
+  - name: "node:22"
     id: SeedDatabase
     waitFor: ["FetchSeedSecret"]
     entrypoint: bash
     args:
       - "-c"
       - |
-        docker run -d --name cloudsql-proxy --network host \
-          gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine \
-          --address 127.0.0.1 --port 5432 \
-          tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
+        export $(cat /workspace/.db_url)
+        curl -fsSL https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64 -o /usr/local/bin/cloud-sql-proxy
+        chmod +x /usr/local/bin/cloud-sql-proxy
+        cloud-sql-proxy --address 127.0.0.1 --port 5432 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 15
-        docker run --rm \
-          --network host \
-          --volume /workspace:/workspace \
-          --workdir /workspace \
-          --env-file /workspace/.db_url \
-          node:22 bash -c "npm ci && npm run prisma:generate && npm run prisma:seed"
-        docker stop cloudsql-proxy && docker rm cloudsql-proxy
+        cd /workspace
+        npm ci
+        npm run prisma:generate
+        npm run prisma:seed
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
