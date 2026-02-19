@@ -38,34 +38,38 @@ steps:
       - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
       - "--quiet"
 
-  - name: "gcr.io/cloud-builders/docker"
-    id: start-cloudsql-proxy
-    entrypoint: bash
-    args:
-      - "-c"
-      - docker run -d --name gce-cloudsql-proxy --network cloudbuild gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --address 0.0.0.0 --port 5432 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
+  - name: "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine"
+    id: copy-proxy-binary
+    waitFor: ["Deploy"]
+    entrypoint: cp
+    args: ["/cloud-sql-proxy", "/proxy/cloud-sql-proxy"]
+    volumes:
+      - name: proxy-bin
+        path: /proxy
 
-  - name: "gcr.io/cloud-builders/docker"
+  - name: "node:22"
     id: install-dependencies
-    entrypoint: bash
-    args:
-      - "-c"
-      - docker run --rm --network cloudbuild --volume /workspace:/workspace --workdir /workspace node:22 npm ci
+    waitFor: ["Deploy"]
+    entrypoint: npm
+    args: ["ci"]
 
-  - name: "gcr.io/cloud-builders/docker"
+  - name: "node:22"
     id: SeedDatabase
+    waitFor: ["install-dependencies", "copy-proxy-binary"]
     entrypoint: bash
     args:
       - "-c"
       - |
+        /proxy/cloud-sql-proxy --unix-socket=/cloudsql tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 10
-        docker run --rm \
-          --network cloudbuild \
-          --volume /workspace:/workspace \
-          --workdir /workspace \
-          --env "DATABASE_URL=$DATABASE_URL" \
-          node:22 bash -c "npm run prisma:generate && npm run prisma:seed"
+        npm run prisma:generate
+        npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
+    volumes:
+      - name: proxy-bin
+        path: /proxy
+      - name: cloudsql
+        path: /cloudsql
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
