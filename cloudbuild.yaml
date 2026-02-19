@@ -43,34 +43,28 @@ steps:
     entrypoint: bash
     args:
       - "-c"
-      - docker run -d --name gce-cloudsql-proxy --network cloudbuild -p 127.0.0.1:5432:5432 gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --address 0.0.0.0 --port 5432 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
+      - docker run -d --name gce-cloudsql-proxy --network cloudbuild gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --address 0.0.0.0 --port 5432 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
 
   - name: "gcr.io/cloud-builders/docker"
-    id: check-cloudsql-logs
+    id: install-dependencies
     entrypoint: bash
     args:
       - "-c"
-      - |
-        echo "Waiting for Cloud SQL Proxy to initialize..."
-        sleep 10
-        docker logs gce-cloudsql-proxy || echo 'No logs found for gce-cloudsql-proxy'
-        echo "Checking socket file..."
-        ls -la /workspace/cloudsql/ || echo "Socket directory not found"
+      - docker run --rm --network cloudbuild --volume /workspace:/workspace --workdir /workspace node:22 npm ci
 
-  - name: "node:22"
-    id: install-dependencies
-    entrypoint: npm
-    args: ["ci"]
-
-  - name: "node:22"
+  - name: "gcr.io/cloud-builders/docker"
     id: SeedDatabase
     entrypoint: bash
     args:
       - "-c"
       - |
-        set -e
-        npm run prisma:generate
-        npm run prisma:seed
+        sleep 10
+        docker run --rm \
+          --network cloudbuild \
+          --volume /workspace:/workspace \
+          --workdir /workspace \
+          --env "DATABASE_URL=$DATABASE_URL" \
+          node:22 bash -c "npm run prisma:generate && npm run prisma:seed"
     secretEnv: ["DATABASE_URL"]
 
 images:
