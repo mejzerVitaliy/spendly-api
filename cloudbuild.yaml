@@ -51,8 +51,18 @@ steps:
     args: ["ci"]
 
   - name: "node:22"
+    id: write-db-url
+    waitFor: ["Deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        printenv DATABASE_URL > /workspace/.db_url
+    secretEnv: ["DATABASE_URL"]
+
+  - name: "node:22"
     id: SeedDatabase
-    waitFor: ["install-dependencies", "copy-proxy-binary"]
+    waitFor: ["install-dependencies", "copy-proxy-binary", "write-db-url"]
     entrypoint: bash
     args:
       - "-c"
@@ -60,8 +70,8 @@ steps:
         /workspace/cloud-sql-proxy --address 127.0.0.1 --port 5433 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 10
         npm run prisma:generate
+        export DATABASE_URL=$(cat /workspace/.db_url)
         npm run prisma:seed
-    secretEnv: ["DATABASE_URL"]
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
