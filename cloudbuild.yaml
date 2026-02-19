@@ -42,10 +42,7 @@ steps:
     id: copy-proxy-binary
     waitFor: ["Deploy"]
     entrypoint: cp
-    args: ["/cloud-sql-proxy", "/proxy/cloud-sql-proxy"]
-    volumes:
-      - name: proxy-bin
-        path: /proxy
+    args: ["/cloud-sql-proxy", "/workspace/cloud-sql-proxy"]
 
   - name: "node:22"
     id: install-dependencies
@@ -60,16 +57,13 @@ steps:
     args:
       - "-c"
       - |
-        /proxy/cloud-sql-proxy --unix-socket=/cloudsql tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
+        mkdir -p /workspace/cloudsql
+        /workspace/cloud-sql-proxy --unix-socket=/workspace/cloudsql tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 10
+        ln -sf /workspace/cloudsql /cloudsql
         npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
-    volumes:
-      - name: proxy-bin
-        path: /proxy
-      - name: cloudsql
-        path: /cloudsql
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
