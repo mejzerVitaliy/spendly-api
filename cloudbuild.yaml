@@ -43,7 +43,7 @@ steps:
     entrypoint: bash
     args:
       - "-c"
-      - docker run -d --name gce-cloudsql-proxy --user root --network cloudbuild --volume /workspace/cloudsql:/cloudsql gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --unix-socket /cloudsql --run-connection-test tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
+      - docker run -d --name gce-cloudsql-proxy --network cloudbuild -p 127.0.0.1:5432:5432 gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --address 0.0.0.0 --port 5432 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
 
   - name: "gcr.io/cloud-builders/docker"
     id: check-cloudsql-logs
@@ -68,20 +68,18 @@ steps:
     args:
       - "-c"
       - |
-        ln -s /workspace/cloudsql /cloudsql
-        echo "Seeding database..."
+        set -e
         npm run prisma:generate
-        npm run prisma:seed
-        echo "Database seeding completed!"
-    secretEnv: ["DATABASE_URL"]
+        DATABASE_URL="$SEED_DATABASE_URL" npm run prisma:seed
+    secretEnv: ["SEED_DATABASE_URL"]
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
 
 availableSecrets:
   secretManager:
-    - versionName: projects/207624620631/secrets/dev-spendly-db-database_url/versions/latest
-      env: DATABASE_URL
+    - versionName: projects/207624620631/secrets/dev-spendly-db-seed_database_url/versions/latest
+      env: SEED_DATABASE_URL
 
 options:
   substitutionOption: ALLOW_LOOSE
