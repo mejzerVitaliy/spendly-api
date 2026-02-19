@@ -57,10 +57,8 @@ steps:
     args:
       - "-c"
       - |
-        mkdir -p /workspace/cloudsql
-        /workspace/cloud-sql-proxy --unix-socket=/workspace/cloudsql tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
+        /workspace/cloud-sql-proxy --address 127.0.0.1 --port 5433 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 10
-        ln -sf /workspace/cloudsql /cloudsql
         npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
