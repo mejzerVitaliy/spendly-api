@@ -43,14 +43,7 @@ steps:
     entrypoint: bash
     args:
       - "-c"
-      - |
-        docker run -d --name gce-cloudsql-proxy \
-          --network cloudbuild \
-          -p 5432:5432 \
-          gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine \
-          --address 0.0.0.0 \
-          --port 5432 \
-          $_CLOUD_SQL_INSTANCE
+      - docker run -d --name gce-cloudsql-proxy --user root --network cloudbuild --volume /workspace/cloudsql:/cloudsql gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --unix-socket /cloudsql --run-connection-test tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
 
   - name: "gcr.io/cloud-builders/docker"
     id: check-cloudsql-logs
@@ -59,8 +52,10 @@ steps:
       - "-c"
       - |
         echo "Waiting for Cloud SQL Proxy to initialize..."
-        sleep 8
-        docker logs gce-cloudsql-proxy || echo 'No logs found'
+        sleep 10
+        docker logs gce-cloudsql-proxy || echo 'No logs found for gce-cloudsql-proxy'
+        echo "Checking socket file..."
+        ls -la /workspace/cloudsql/ || echo "Socket directory not found"
 
   - name: "node:22"
     id: install-dependencies
@@ -73,9 +68,11 @@ steps:
     args:
       - "-c"
       - |
+        ln -s /workspace/cloudsql /cloudsql
+        echo "Seeding database..."
         npm run prisma:generate
-        DB_CREDS=$(echo "$DATABASE_URL" | sed 's|postgresql://||' | sed 's|@.*||')
-        DATABASE_URL="postgresql://${DB_CREDS}@gce-cloudsql-proxy:5432/postgres" npm run prisma:seed
+        npm run prisma:seed
+        echo "Database seeding completed!"
     secretEnv: ["DATABASE_URL"]
 
 images:
@@ -83,7 +80,7 @@ images:
 
 availableSecrets:
   secretManager:
-    - versionName: projects/207624620631/secrets/dev-spendly-db-database_url/versions/1
+    - versionName: projects/207624620631/secrets/dev-spendly-db-database_url/versions/latest
       env: DATABASE_URL
 
 options:
