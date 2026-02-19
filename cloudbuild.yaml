@@ -55,14 +55,13 @@ steps:
     args:
       - "-c"
       - |
-        docker network create cloudbuild || true
-        docker run -d --name cloudsql-proxy --network cloudbuild \
+        docker run -d --name cloudsql-proxy --network host \
           gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine \
-          --address 0.0.0.0 --port 5432 \
+          --address 127.0.0.1 --port 5432 \
           tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
         sleep 15
         docker run --rm \
-          --network cloudbuild \
+          --network host \
           --volume /workspace:/workspace \
           --workdir /workspace \
           --env-file /workspace/.db_url \
