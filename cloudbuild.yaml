@@ -20,23 +20,21 @@ steps:
 
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
     id: Deploy
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - services
-      - update
-      - $_SERVICE_NAME
-      - "--platform=managed"
-      - >-
-        --image=$_AR_DOCKER_IMAGE_URI:latest
-      - "--region=$_DEPLOY_REGION"
-      - "--timeout=300"
-      - "--cpu-boost"
-      - "--max-instances=10"
-      - "--min-instances=0"
-      - "--set-env-vars=NODE_ENV=production,APPLICATION_URL=$_APPLICATION_URL,FRONTEND_URL=$_FRONTEND_URL"
-      - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
-      - "--quiet"
+      - "-c"
+      - |
+        gcloud run services update $_SERVICE_NAME \
+          --platform=managed \
+          --image=$_AR_DOCKER_IMAGE_URI:latest \
+          --region=$_DEPLOY_REGION \
+          --timeout=300 \
+          --cpu-boost \
+          --max-instances=10 \
+          --min-instances=0 \
+          --set-env-vars=NODE_ENV=production,APPLICATION_URL=$_APPLICATION_URL,FRONTEND_URL=$_FRONTEND_URL \
+          --set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest \
+          --quiet
 
   - name: "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine"
     id: copy-proxy-binary
@@ -57,8 +55,8 @@ steps:
     args:
       - "-c"
       - |
-        printenv DATABASE_URL > /workspace/.db_url
-    secretEnv: ["DATABASE_URL"]
+        printenv DB_URL > /workspace/.db_url || true
+    secretEnv: ["DB_URL"]
 
   - name: "node:22"
     id: SeedDatabase
@@ -70,7 +68,7 @@ steps:
         /workspace/cloud-sql-proxy --address 127.0.0.1 --port 5433 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
         sleep 10
         npm run prisma:generate
-        export DATABASE_URL=$(cat /workspace/.db_url)
+        export DATABASE_URL=$$(cat /workspace/.db_url)
         npm run prisma:seed
 
 images:
@@ -79,7 +77,7 @@ images:
 availableSecrets:
   secretManager:
     - versionName: projects/207624620631/secrets/dev-spendly-db-seed_database_url/versions/latest
-      env: DATABASE_URL
+      env: DB_URL
 
 options:
   substitutionOption: ALLOW_LOOSE
