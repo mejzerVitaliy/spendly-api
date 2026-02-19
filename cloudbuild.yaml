@@ -27,8 +27,8 @@ steps:
       - "--platform=managed"
       - "--image=$_AR_DOCKER_IMAGE_URI:latest"
       - "--region=$_DEPLOY_REGION"
-      - "--set-env-vars=NODE_ENV=production"
-      - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-spendly-api-application_secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
+      - "--set-env-vars=NODE_ENV=production,APPLICATION_URL=$_APPLICATION_URL,FRONTEND_URL=$_FRONTEND_URL"
+      - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
       - "--quiet"
 
   - name: "gcr.io/cloud-builders/docker"
