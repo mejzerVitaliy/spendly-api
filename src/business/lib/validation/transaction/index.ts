@@ -59,6 +59,10 @@ export const parseTextTransactionResponseSchema = createResponseWithDataSchema(
   z.array(transactionBaseSchema),
 );
 
+export const parseVoiceTransactionResponseSchema = createResponseWithDataSchema(
+  z.array(transactionBaseSchema),
+);
+
 export type {
   CreateTransactionInput,
   UpdateTransactionInput,

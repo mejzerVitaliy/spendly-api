@@ -135,9 +135,35 @@ const createFromText = async (
   reply.send(response);
 };
 
+const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = req.user as JwtPayload;
+
+  const data = await req.file();
+
+  if (!data) {
+    reply.status(400).send({ message: 'Audio file is required' });
+    return;
+  }
+
+  const audioBuffer = await data.toBuffer();
+  const filename = data.filename || 'audio.m4a';
+
+  const transactions = await transactionService.createFromVoice(
+    userId,
+    audioBuffer,
+    filename,
+  );
+
+  reply.send({
+    message: 'Transactions created from voice successfully',
+    data: transactions,
+  });
+};
+
 export const transactionHandler = {
   create,
   createFromText,
+  createFromVoice,
   getAll,
   getById,
   update,

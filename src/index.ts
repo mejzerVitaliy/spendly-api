@@ -1,5 +1,10 @@
 /// <reference types="./types/index.d.ts" />
 
+import { File } from 'node:buffer';
+if (!globalThis.File) {
+  (globalThis as any).File = File;
+}
+
 import Fastify from 'fastify';
 import fastifyCors from 'fastify-cors';
 import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
