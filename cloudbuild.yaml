@@ -51,14 +51,24 @@ steps:
   - name: "node:22"
     id: SeedDatabase
     entrypoint: bash
+    env:
+      - "CLOUD_SQL_INSTANCE=$_CLOUD_SQL_INSTANCE"
     args:
       - "-c"
       - |
         wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64 -O /usr/local/bin/cloud-sql-proxy
         chmod +x /usr/local/bin/cloud-sql-proxy
         mkdir -p /cloudsql
-        cloud-sql-proxy --unix-socket=/cloudsql $_CLOUD_SQL_INSTANCE &
-        sleep 5
+        cloud-sql-proxy --unix-socket=/cloudsql "$CLOUD_SQL_INSTANCE" &
+        echo "Waiting for Cloud SQL socket at /cloudsql/$CLOUD_SQL_INSTANCE ..."
+        for i in $(seq 1 30); do
+          if [ -S "/cloudsql/$CLOUD_SQL_INSTANCE" ]; then
+            echo "Socket ready after ${i}s"
+            break
+          fi
+          sleep 1
+        done
+        ls -la /cloudsql/ || true
         npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
