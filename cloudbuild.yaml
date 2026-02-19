@@ -70,8 +70,8 @@ steps:
       - |
         set -e
         npm run prisma:generate
-        DATABASE_URL="$SEED_DATABASE_URL" npm run prisma:seed
-    secretEnv: ["SEED_DATABASE_URL"]
+        npm run prisma:seed
+    secretEnv: ["DATABASE_URL"]
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
@@ -79,7 +79,7 @@ images:
 availableSecrets:
   secretManager:
     - versionName: projects/207624620631/secrets/dev-spendly-db-seed_database_url/versions/latest
-      env: SEED_DATABASE_URL
+      env: DATABASE_URL
 
 options:
   substitutionOption: ALLOW_LOOSE
