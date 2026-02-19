@@ -1,79 +1,81 @@
 steps:
   - name: gcr.io/cloud-builders/docker
+    id: Build
     args:
       - build
       - "--no-cache"
       - "-t"
-      - >-
-        $_AR_DOCKER_IMAGE_URI:latest
+      - "$_AR_DOCKER_IMAGE_URI:latest"
       - .
       - "-f"
       - Dockerfile
-    id: Build
+
   - name: gcr.io/cloud-builders/docker
+    id: Push
     args:
       - push
-      - >-
-        $_AR_DOCKER_IMAGE_URI:latest
-    id: Push
+      - "$_AR_DOCKER_IMAGE_URI:latest"
+
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: Deploy
+    entrypoint: gcloud
     args:
       - run
       - services
       - update
       - $_SERVICE_NAME
       - "--platform=managed"
-      - >-
-        --image=$_AR_DOCKER_IMAGE_URI:latest
+      - "--image=$_AR_DOCKER_IMAGE_URI:latest"
       - "--region=$_DEPLOY_REGION"
-      - "--timeout=300"
-      - "--cpu-boost"
-      - "--max-instances=10"
-      - "--min-instances=0"
       - "--quiet"
-    id: Deploy
-    entrypoint: gcloud
+
   - name: "gcr.io/cloud-builders/docker"
-    id: "start-cloudsql-proxy"
-    entrypoint: "bash"
+    id: start-cloudsql-proxy
+    entrypoint: bash
     args:
       - "-c"
-      - docker run -d --name gce-cloudsql-proxy --user root --network cloudbuild --volume /workspace/cloudsql:/cloudsql gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine --unix-socket /cloudsql --run-connection-test spendly:europe-central2:dev-spendly-db
+      - >-
+        docker run -d --name gce-cloudsql-proxy --user root
+        --network cloudbuild
+        --volume /workspace/cloudsql:/cloudsql
+        gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine
+        --unix-socket /cloudsql --run-connection-test $_CLOUD_SQL_INSTANCE
+
   - name: "gcr.io/cloud-builders/docker"
-    id: "check-cloudsql-logs"
-    entrypoint: "bash"
+    id: check-cloudsql-logs
+    entrypoint: bash
     args:
       - "-c"
       - |
-        echo "Waiting for Cloud SQL Proxy to initialize..."
         sleep 5
-        docker logs gce-cloudsql-proxy || echo 'No logs found for gce-cloudsql-proxy'
-        echo "Checking socket file..."
-        ls -la /workspace/cloudsql/ || echo "Socket directory not found"
+        docker logs gce-cloudsql-proxy || echo 'No logs found'
+
   - name: "node:22"
-    id: "install-dependencies"
-    entrypoint: "npm"
+    id: install-dependencies
+    entrypoint: npm
     args: ["ci"]
-  - name: node:22
+
+  - name: "node:22"
+    id: SeedDatabase
     entrypoint: bash
     args:
       - "-c"
       - |
         ln -s /workspace/cloudsql /cloudsql
-        echo "Seeding database..."
         npm run prisma:seed
-        echo "Database seeding completed!"
-    id: SeedDatabase
     secretEnv: ["DATABASE_URL"]
+
 images:
-  - >-
-    $_AR_DOCKER_IMAGE_URI:latest
+  - "$_AR_DOCKER_IMAGE_URI:latest"
+
 availableSecrets:
   secretManager:
     - versionName: projects/207624620631/secrets/dev-spendly-db-database_url/versions/1
       env: DATABASE_URL
+
 options:
   substitutionOption: ALLOW_LOOSE
   logging: CLOUD_LOGGING_ONLY
+
 tags:
   - gcp-cloud-build-deploy-cloud-run
