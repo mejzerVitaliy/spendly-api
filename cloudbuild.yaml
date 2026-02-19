@@ -36,48 +36,41 @@ steps:
           --set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest \
           --quiet
 
-  - name: "gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine"
-    id: copy-proxy-binary
-    waitFor: ["Deploy"]
-    entrypoint: cp
-    args: ["/cloud-sql-proxy", "/workspace/cloud-sql-proxy"]
-
-  - name: "node:22"
-    id: install-dependencies
-    waitFor: ["Deploy"]
-    entrypoint: npm
-    args: ["ci"]
-
-  - name: "node:22"
-    id: write-db-url
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: FetchSeedSecret
     waitFor: ["Deploy"]
     entrypoint: bash
     args:
       - "-c"
       - |
-        printenv DB_URL > /workspace/.db_url || true
-    secretEnv: ["DB_URL"]
+        echo -n "DATABASE_URL=" > /workspace/.db_url
+        gcloud secrets versions access latest \
+          --secret=dev-spendly-db-seed_database_url \
+          --project=tokyo-hydra-464314-a0 >> /workspace/.db_url
 
-  - name: "node:22"
+  - name: "gcr.io/cloud-builders/docker"
     id: SeedDatabase
-    waitFor: ["install-dependencies", "copy-proxy-binary", "write-db-url"]
+    waitFor: ["FetchSeedSecret"]
     entrypoint: bash
     args:
       - "-c"
       - |
-        /workspace/cloud-sql-proxy --address 127.0.0.1 --port 5433 tokyo-hydra-464314-a0:europe-central2:dev-spendly-db &
-        sleep 10
-        npm run prisma:generate
-        export DATABASE_URL=$$(cat /workspace/.db_url)
-        npm run prisma:seed
+        docker network create cloudbuild || true
+        docker run -d --name cloudsql-proxy --network cloudbuild \
+          gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine \
+          --address 0.0.0.0 --port 5432 \
+          tokyo-hydra-464314-a0:europe-central2:dev-spendly-db
+        sleep 15
+        docker run --rm \
+          --network cloudbuild \
+          --volume /workspace:/workspace \
+          --workdir /workspace \
+          --env-file /workspace/.db_url \
+          node:22 bash -c "npm ci && npm run prisma:generate && npm run prisma:seed"
+        docker stop cloudsql-proxy && docker rm cloudsql-proxy
 
 images:
   - "$_AR_DOCKER_IMAGE_URI:latest"
-
-availableSecrets:
-  secretManager:
-    - versionName: projects/207624620631/secrets/dev-spendly-db-seed_database_url/versions/latest
-      env: DB_URL
 
 options:
   substitutionOption: ALLOW_LOOSE
