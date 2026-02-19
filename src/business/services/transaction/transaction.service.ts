@@ -5,10 +5,12 @@ import {
   BadRequestError,
 } from '@/business/lib';
 import {
+  categoryRepository,
   transactionRepository,
   userRepository,
   walletRepository,
 } from '@/database/repositories';
+import { parseTextTransaction } from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
@@ -367,8 +369,77 @@ const remove = async (id: string) => {
   });
 };
 
+const DEFAULT_CATEGORY_NAME = 'Unexpected Expenses';
+
+const createFromText = async (userId: string, text: string) => {
+  const user = await userRepository.findUnique({
+    where: { id: userId },
+  });
+
+  if (!user) {
+    throw NotFoundError('User not found');
+  }
+
+  const categories = await categoryRepository.findMany({
+    select: { id: true, name: true, type: true },
+  });
+
+  const parsed = await parseTextTransaction({
+    mainCurrency: user.mainCurrencyCode,
+    todayDate: new Date().toISOString().split('T')[0],
+    categories: categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+    })),
+    userText: text,
+  });
+
+  if (!parsed.success || parsed.transactions.length === 0) {
+    throw new BadRequestError(
+      parsed.error ?? 'Failed to parse transaction from text',
+    );
+  }
+
+  const fallbackCategory = await categoryRepository.findByName(
+    DEFAULT_CATEGORY_NAME,
+  );
+
+  if (!fallbackCategory) {
+    throw new BadRequestError('Default category not found');
+  }
+
+  const results = await Promise.allSettled(
+    parsed.transactions.map((item) =>
+      create(userId, {
+        amount: item.amount,
+        currencyCode: item.currencyCode,
+        type: item.type,
+        categoryId: item.categoryId ?? fallbackCategory.id,
+        walletId: item.walletId ?? undefined,
+        description: item.description,
+        date: new Date(item.date).toISOString(),
+      }),
+    ),
+  );
+
+  const created = results
+    .filter(
+      (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof create>>> =>
+        r.status === 'fulfilled',
+    )
+    .map((r) => r.value);
+
+  if (created.length === 0) {
+    throw new BadRequestError('Failed to create any transactions');
+  }
+
+  return created;
+};
+
 export const transactionService = {
   create,
+  createFromText,
   getAll,
   getById,
   update,

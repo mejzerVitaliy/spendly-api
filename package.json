@@ -52,9 +52,9 @@
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "prettier": "^3.5.3",
-    "tsc-alias": "^1.8.10",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsc-alias": "^1.8.10",
     "typescript": "^5.7.3"
   },
   "dependencies": {
@@ -72,6 +72,7 @@
     "fastify-sensible": "^3.1.2",
     "fastify-type-provider-zod": "^4.0.2",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^6.22.0",
     "pino-pretty": "^13.0.0",
     "prisma": "^6.5.0",
     "resend": "^4.6.0",
