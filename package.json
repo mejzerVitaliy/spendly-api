@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node build/src/index.js",
+    "start": "node build/index.js",
     "build": "rm -rf build && tsc && tsc-alias",
     "dev": "ts-node-dev --require tsconfig-paths/register --respawn --transpile-only src/index.ts",
     "lint:fix": "eslint \"**/*.{ts,tsx,js,jsx}\" --fix",
