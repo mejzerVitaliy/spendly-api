@@ -76,6 +76,7 @@ steps:
       - "-c"
       - |
         ln -s /workspace/cloudsql /cloudsql
+        npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
 
