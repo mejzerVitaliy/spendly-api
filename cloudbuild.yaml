@@ -43,27 +43,6 @@ steps:
       - "--set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest"
       - "--quiet"
 
-  - name: "gcr.io/cloud-builders/docker"
-    id: start-cloudsql-proxy
-    entrypoint: bash
-    args:
-      - "-c"
-      - >-
-        docker run -d --name gce-cloudsql-proxy --user root
-        --network cloudbuild
-        --volume /workspace/cloudsql:/cloudsql
-        gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14-alpine
-        --unix-socket /cloudsql --run-connection-test $_CLOUD_SQL_INSTANCE
-
-  - name: "gcr.io/cloud-builders/docker"
-    id: check-cloudsql-logs
-    entrypoint: bash
-    args:
-      - "-c"
-      - |
-        sleep 5
-        docker logs gce-cloudsql-proxy || echo 'No logs found'
-
   - name: "node:22"
     id: install-dependencies
     entrypoint: npm
@@ -75,7 +54,11 @@ steps:
     args:
       - "-c"
       - |
-        ln -s /workspace/cloudsql /cloudsql
+        wget -q https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.14.1/cloud-sql-proxy.linux.amd64 -O /usr/local/bin/cloud-sql-proxy
+        chmod +x /usr/local/bin/cloud-sql-proxy
+        mkdir -p /cloudsql
+        cloud-sql-proxy --unix-socket=/cloudsql $_CLOUD_SQL_INSTANCE &
+        sleep 5
         npm run prisma:generate
         npm run prisma:seed
     secretEnv: ["DATABASE_URL"]
