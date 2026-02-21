@@ -22,7 +22,7 @@ const getSummary = async (
   reply.send(response);
 };
 
-const getCategoryBarChartData = async (
+const getCategoryChart = async (
   req: FastifyRequest<{
     Querystring: CategoryChartQuery;
   }>,
@@ -31,46 +31,17 @@ const getCategoryBarChartData = async (
   const { userId } = req.user as JwtPayload;
   const { startDate, endDate, type } = req.query;
 
-  const expenses = await reportsService.getCategoryBarChartData(
+  const data = await reportsService.getCategoryChart(
     userId,
     startDate,
     endDate,
     type,
   );
 
-  const response = {
-    message: 'Expenses by category fetched successfully',
-    data: expenses,
-  };
-
-  reply.send(response);
+  reply.send({ message: 'Category chart fetched successfully', data });
 };
 
-const getCategoryPieChartData = async (
-  req: FastifyRequest<{
-    Querystring: CategoryChartQuery;
-  }>,
-  reply: FastifyReply,
-) => {
-  const { userId } = req.user as JwtPayload;
-  const { startDate, endDate, type } = req.query;
-
-  const pieData = await reportsService.getCategoryPieChartData(
-    userId,
-    startDate,
-    endDate,
-    type,
-  );
-
-  const response = {
-    message: 'Pie chart data fetched successfully',
-    data: pieData,
-  };
-
-  reply.send(response);
-};
-
-const getIncomesExpensesTrend = async (
+const getCashFlowTrend = async (
   req: FastifyRequest<{
     Querystring: CategoryChartQuery;
   }>,
@@ -79,47 +50,17 @@ const getIncomesExpensesTrend = async (
   const { userId } = req.user as JwtPayload;
   const { startDate, endDate } = req.query;
 
-  const trendData = await reportsService.getIncomesExpensesTrend(
+  const data = await reportsService.getCashFlowTrend(
     userId,
     startDate,
     endDate,
   );
 
-  const response = {
-    message: 'Incomes and expenses trend data fetched successfully',
-    data: trendData,
-  };
-
-  reply.send(response);
-};
-
-const getBalanceTrend = async (
-  req: FastifyRequest<{
-    Querystring: CategoryChartQuery;
-  }>,
-  reply: FastifyReply,
-) => {
-  const { userId } = req.user as JwtPayload;
-  const { startDate, endDate } = req.query;
-
-  const balanceTrend = await reportsService.getBalanceTrend(
-    userId,
-    startDate,
-    endDate,
-  );
-
-  const response = {
-    message: 'Balance trend data fetched successfully',
-    data: balanceTrend,
-  };
-
-  reply.send(response);
+  reply.send({ message: 'Cash flow trend fetched successfully', data });
 };
 
 export const reportsHandler = {
   getSummary,
-  getCategoryBarChartData,
-  getCategoryPieChartData,
-  getIncomesExpensesTrend,
-  getBalanceTrend,
+  getCategoryChart,
+  getCashFlowTrend,
 };

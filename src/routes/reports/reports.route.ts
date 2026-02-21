@@ -1,11 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { reportsHandler } from './reports.handler';
 import {
-  getBalanceTrendChartResponseSchema,
-  getCategoryBarChartResponseSchema,
   getCategoryChartQuerySchema,
-  getCategoryPieChartResponseSchema,
-  getIncomesExpensesTrendChartResponseSchema,
+  getCategoryChartResponseSchema,
+  getCashFlowTrendChartResponseSchema,
   getReportsSummaryQuerySchema,
   getReportsSummaryResponseSchema,
 } from '@/business/lib';
@@ -19,75 +17,37 @@ export const reportsRoutes = async (fastify: FastifyInstance) => {
         tags: ['reports'],
         summary: 'Get reports summary',
         querystring: getReportsSummaryQuerySchema,
-        response: {
-          200: getReportsSummaryResponseSchema,
-        },
+        response: { 200: getReportsSummaryResponseSchema },
       },
     },
     reportsHandler.getSummary,
   );
 
   fastify.get(
-    '/categories/bar-chart',
+    '/categories',
     {
       preHandler: fastify.authenticate,
       schema: {
         tags: ['reports'],
-        summary: 'Get expenses by category for bar chart',
+        summary: 'Get category breakdown (income or expense)',
         querystring: getCategoryChartQuerySchema,
-        response: {
-          200: getCategoryBarChartResponseSchema,
-        },
+        response: { 200: getCategoryChartResponseSchema },
       },
     },
-    reportsHandler.getCategoryBarChartData,
+    reportsHandler.getCategoryChart,
   );
 
   fastify.get(
-    '/categories/pie-chart',
+    '/cash-flow-trend',
     {
       preHandler: fastify.authenticate,
       schema: {
         tags: ['reports'],
-        summary: 'Get expenses pie chart data with colors',
+        summary: 'Get cash flow trend (incomes vs expenses by day)',
         querystring: getCategoryChartQuerySchema,
-        response: {
-          200: getCategoryPieChartResponseSchema,
-        },
+        response: { 200: getCashFlowTrendChartResponseSchema },
       },
     },
-    reportsHandler.getCategoryPieChartData,
-  );
-
-  fastify.get(
-    '/incomes-expenses-trend',
-    {
-      preHandler: fastify.authenticate,
-      schema: {
-        tags: ['reports'],
-        summary: 'Get incomes and expenses trend line chart data',
-        querystring: getCategoryChartQuerySchema,
-        response: {
-          200: getIncomesExpensesTrendChartResponseSchema,
-        },
-      },
-    },
-    reportsHandler.getIncomesExpensesTrend,
-  );
-
-  fastify.get(
-    '/balance-trend',
-    {
-      preHandler: fastify.authenticate,
-      schema: {
-        tags: ['reports'],
-        summary: 'Get balance trend line chart data',
-        querystring: getCategoryChartQuerySchema,
-        response: {
-          200: getBalanceTrendChartResponseSchema,
-        },
-      },
-    },
-    reportsHandler.getBalanceTrend,
+    reportsHandler.getCashFlowTrend,
   );
 };

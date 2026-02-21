@@ -19,7 +19,32 @@ import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
 
-const create = async (userId: string, input: CreateTransactionInput) => {
+const userMutex = new Map<string, Promise<void>>();
+
+const withUserLock = <T>(userId: string, fn: () => Promise<T>): Promise<T> => {
+  const prev = userMutex.get(userId) ?? Promise.resolve();
+  let release!: () => void;
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  userMutex.set(userId, next);
+  return prev.then(fn).finally(() => {
+    release();
+    if (userMutex.get(userId) === next) userMutex.delete(userId);
+  });
+};
+
+interface PreparedTransaction {
+  walletId: string;
+  mainCurrencyCode: string;
+  convertedAmount: number;
+  input: CreateTransactionInput;
+}
+
+const prepareTransaction = async (
+  userId: string,
+  input: CreateTransactionInput,
+): Promise<PreparedTransaction> => {
   let walletId = input.walletId;
 
   if (!walletId) {
@@ -44,18 +69,6 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     }
   }
 
-  const transaction = await transactionRepository.create({
-    data: {
-      userId,
-      ...input,
-      walletId,
-    },
-  });
-
-  if (!transaction) {
-    throw NotFoundError('Transaction not created');
-  }
-
   const user = await userRepository.findUnique({
     where: { id: userId },
   });
@@ -64,25 +77,48 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     throw NotFoundError('User not found');
   }
 
-  const convertedAmount = await currencyService.convertAmount(
-    transaction.amount,
-    transaction.currencyCode,
+  const convertedAmountRaw = await currencyService.convertAmount(
+    input.amount,
+    input.currencyCode,
     user.mainCurrencyCode,
   );
 
-  let totalBalance;
+  return {
+    walletId,
+    mainCurrencyCode: user.mainCurrencyCode,
+    convertedAmount: Math.round(convertedAmountRaw),
+    input,
+  };
+};
 
-  if (transaction.type === TransactionType.INCOME) {
-    totalBalance = user.totalBalance + convertedAmount;
-  } else {
-    totalBalance = user.totalBalance - convertedAmount;
+const finalizeTransaction = async (
+  userId: string,
+  prepared: PreparedTransaction,
+) => {
+  const { walletId, mainCurrencyCode, convertedAmount, input } = prepared;
+
+  const transaction = await transactionRepository.create({
+    data: { userId, ...input, walletId },
+  });
+
+  if (!transaction) {
+    throw NotFoundError('Transaction not created');
   }
+
+  const user = await userRepository.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw NotFoundError('User not found');
+  }
+
+  const delta =
+    transaction.type === TransactionType.INCOME
+      ? convertedAmount
+      : -convertedAmount;
 
   await userRepository.update({
     where: { id: userId },
-    data: {
-      totalBalance,
-    },
+    data: { totalBalance: user.totalBalance + delta },
   });
 
   await snapshotService.createOrUpdateSnapshot({
@@ -90,13 +126,18 @@ const create = async (userId: string, input: CreateTransactionInput) => {
     date: transaction.date,
     amount: convertedAmount,
     type: transaction.type,
-    currencyCode: user.mainCurrencyCode,
+    currencyCode: mainCurrencyCode,
   });
 
   return {
     ...transaction,
     date: transaction.date.toISOString(),
   };
+};
+
+const create = async (userId: string, input: CreateTransactionInput) => {
+  const prepared = await prepareTransaction(userId, input);
+  return withUserLock(userId, () => finalizeTransaction(userId, prepared));
 };
 
 interface GetAllTransactionsParams {
@@ -413,26 +454,43 @@ const createFromText = async (userId: string, text: string) => {
     throw new BadRequestError('Default category not found');
   }
 
-  const results = await Promise.allSettled(
-    parsed.transactions.map((item) =>
-      create(userId, {
-        amount: item.amount,
-        currencyCode: item.currencyCode,
-        type: item.type,
-        categoryId: item.categoryId ?? fallbackCategory.id,
-        walletId: item.walletId ?? undefined,
-        description: item.description,
-        date: new Date(item.date).toISOString(),
-      }),
-    ),
+  const inputs = parsed.transactions.map((item) => ({
+    amount: item.amount,
+    currencyCode: item.currencyCode,
+    type: item.type,
+    categoryId: item.categoryId ?? fallbackCategory.id,
+    walletId: item.walletId ?? undefined,
+    description: item.description,
+    date: new Date(item.date).toISOString(),
+  }));
+
+  const preparedResults = await Promise.allSettled(
+    inputs.map((input) => prepareTransaction(userId, input)),
   );
 
-  const created = results
+  const prepared = preparedResults
     .filter(
-      (r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof create>>> =>
+      (r): r is PromiseFulfilledResult<PreparedTransaction> =>
         r.status === 'fulfilled',
     )
     .map((r) => r.value);
+
+  if (prepared.length === 0) {
+    throw new BadRequestError('Failed to prepare any transactions');
+  }
+
+  const created: Awaited<ReturnType<typeof finalizeTransaction>>[] = [];
+
+  for (const p of prepared) {
+    try {
+      const transaction = await withUserLock(userId, () =>
+        finalizeTransaction(userId, p),
+      );
+      created.push(transaction);
+    } catch {
+      // continue with remaining transactions
+    }
+  }
 
   if (created.length === 0) {
     throw new BadRequestError('Failed to create any transactions');

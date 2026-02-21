@@ -56,93 +56,56 @@ export const getCategoryChartQuerySchema = z.object({
   type: z.nativeEnum(TransactionType).optional(),
 });
 
-export const categoryBarChartItemSchema = z.object({
-  value: z.number(),
-  label: z.string(),
-  frontColor: z.string(),
-});
-
-export const categoryBarChartSchema = z.object({
-  data: z.array(categoryBarChartItemSchema),
-  totalExpenses: z.number(),
-  period: z.object({
-    from: z.string().nullable(),
-    to: z.string().nullable(),
-  }),
-});
-
-export const getCategoryBarChartResponseSchema = createResponseWithDataSchema(
-  categoryBarChartSchema,
-);
-
-type CategoryBarChart = z.infer<typeof categoryBarChartSchema>;
-
-export const pieChartItemSchema = z.object({
-  value: z.number(),
+export const categoryChartItemSchema = z.object({
+  amount: z.number(),
+  percentage: z.number(),
   label: z.string(),
   color: z.string(),
-  focused: z.boolean().optional(),
 });
 
-export const categoryPieChartSchema = z.object({
-  data: z.array(pieChartItemSchema),
-  totalExpenses: z.number(),
+export const categoryChartSchema = z.object({
+  data: z.array(categoryChartItemSchema),
+  total: z.number(),
+  currencyCode: z.string(),
   period: z.object({
     from: z.string().nullable(),
     to: z.string().nullable(),
   }),
 });
 
-export const getCategoryPieChartResponseSchema = createResponseWithDataSchema(
-  categoryPieChartSchema,
-);
+export const getCategoryChartResponseSchema =
+  createResponseWithDataSchema(categoryChartSchema);
 
-type CategoryPieChart = z.infer<typeof categoryPieChartSchema>;
+type CategoryChart = z.infer<typeof categoryChartSchema>;
 
 type CategoryChartQuery = z.infer<typeof getCategoryChartQuerySchema>;
 
-export const lineChartItemSchema = z.object({
+export const trendPointSchema = z.object({
   value: z.number(),
-  dataPointText: z.string().optional(),
+  date: z.string(),
   label: z.string(),
 });
 
-export const incomesExpensesTrendChartSchema = z.object({
-  expenses: z.array(lineChartItemSchema),
-  incomes: z.array(lineChartItemSchema),
+export const cashFlowTrendChartSchema = z.object({
+  incomes: z.array(trendPointSchema),
+  expenses: z.array(trendPointSchema),
+  currencyCode: z.string(),
   period: z.object({
-    from: z.string().nullable(),
-    to: z.string().nullable(),
+    from: z.string(),
+    to: z.string(),
   }),
 });
 
-export const getIncomesExpensesTrendChartResponseSchema =
-  createResponseWithDataSchema(incomesExpensesTrendChartSchema);
-
-type IncomesExpensesTrendChart = z.infer<
-  typeof incomesExpensesTrendChartSchema
->;
-
-export const balanceTrendChartSchema = z.object({
-  data: z.array(lineChartItemSchema),
-  period: z.object({
-    from: z.string().nullable(),
-    to: z.string().nullable(),
-  }),
-});
-
-export const getBalanceTrendChartResponseSchema = createResponseWithDataSchema(
-  balanceTrendChartSchema,
+export const getCashFlowTrendChartResponseSchema = createResponseWithDataSchema(
+  cashFlowTrendChartSchema,
 );
 
-type BalanceTrendChart = z.infer<typeof balanceTrendChartSchema>;
+type CashFlowTrendChart = z.infer<typeof cashFlowTrendChartSchema>;
 
 export type {
   SummaryQuery,
   CategoryChartQuery,
   ReportsSummary,
-  CategoryBarChart,
-  CategoryPieChart,
-  IncomesExpensesTrendChart,
-  BalanceTrendChart,
+  CategoryChart,
+  CashFlowTrendChart,
 };

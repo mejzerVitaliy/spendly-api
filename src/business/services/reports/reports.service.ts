@@ -1,8 +1,6 @@
 import {
-  BalanceTrendChart,
-  CategoryBarChart,
-  CategoryPieChart,
-  IncomesExpensesTrendChart,
+  CategoryChart,
+  CashFlowTrendChart,
   NotFoundError,
   ReportsSummary,
 } from '@/business/lib';
@@ -147,19 +145,14 @@ const getSummary = async (
   };
 };
 
-const getCategoryBarChartData = async (
+const getCategoryChart = async (
   userId: string,
   startDate?: string,
   endDate?: string,
   type?: TransactionType,
-): Promise<CategoryBarChart> => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
+): Promise<CategoryChart> => {
+  const user = await userRepository.findUnique({ where: { id: userId } });
+  if (!user) throw NotFoundError('User not found');
 
   const transactions = await transactionRepository.findMany({
     where: {
@@ -170,13 +163,11 @@ const getCategoryBarChartData = async (
         lte: endDate ? new Date(endDate) : undefined,
       },
     },
-    include: {
-      category: true,
-    },
+    include: { category: true },
   });
 
-  const categoryMap = new Map<string, { amount: number; count: number }>();
-  let totalExpenses = 0;
+  const categoryMap = new Map<string, { amount: number; color: string }>();
+  let total = 0;
 
   for (const transaction of transactions) {
     const convertedAmount = await currencyService.convertAmount(
@@ -184,291 +175,84 @@ const getCategoryBarChartData = async (
       transaction.currencyCode,
       user.mainCurrencyCode,
     );
-
-    const categoryName = transaction.category?.name || 'Unknown';
-    const existing = categoryMap.get(categoryName) || {
-      amount: 0,
-      count: 0,
-    };
-    categoryMap.set(categoryName, {
+    const label = transaction.category?.name || 'Unknown';
+    const color = transaction.category?.color || '#6B7280';
+    const existing = categoryMap.get(label) || { amount: 0, color };
+    categoryMap.set(label, {
       amount: existing.amount + convertedAmount,
-      count: existing.count + 1,
+      color,
     });
-    totalExpenses += convertedAmount;
+    total += convertedAmount;
   }
 
-  const categories = Array.from(categoryMap.entries()).map(
-    ([category, categoryData]) => ({
-      label: category,
-      value: categoryData.amount,
-      frontColor: '#977DFF',
-    }),
-  );
-
-  categories.sort((a, b) => b.value - a.value);
+  const data = Array.from(categoryMap.entries())
+    .map(([label, { amount, color }]) => ({
+      label,
+      amount,
+      color,
+      percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
+    }))
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 7);
 
   return {
-    data: categories,
-    totalExpenses,
-    period: {
-      from: startDate || null,
-      to: endDate || null,
-    },
+    data,
+    total,
+    currencyCode: user.mainCurrencyCode,
+    period: { from: startDate || null, to: endDate || null },
   };
 };
 
-const getCategoryPieChartData = async (
+const getCashFlowTrend = async (
   userId: string,
   startDate?: string,
   endDate?: string,
-  type?: TransactionType,
-): Promise<CategoryPieChart> => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
-
-  const transactions = await transactionRepository.findMany({
-    where: {
-      userId,
-      type: type || TransactionType.EXPENSE,
-      date: {
-        gte: startDate ? new Date(startDate) : undefined,
-        lte: endDate ? new Date(endDate) : undefined,
-      },
-    },
-    include: {
-      category: true,
-    },
-  });
-
-  const categoryMap = new Map<
-    string,
-    { amount: number; count: number; color: string }
-  >();
-  let totalExpenses = 0;
-
-  for (const transaction of transactions) {
-    const convertedAmount = await currencyService.convertAmount(
-      transaction.amount,
-      transaction.currencyCode,
-      user.mainCurrencyCode,
-    );
-
-    const categoryName = transaction.category?.name || 'Unknown';
-    const categoryColor = transaction.category?.color || '#6B7280';
-    const existing = categoryMap.get(categoryName) || {
-      amount: 0,
-      count: 0,
-      color: categoryColor,
-    };
-    categoryMap.set(categoryName, {
-      amount: existing.amount + convertedAmount,
-      count: existing.count + 1,
-      color: categoryColor,
-    });
-    totalExpenses += convertedAmount;
-  }
-
-  const pieData = Array.from(categoryMap.entries()).map(
-    ([category, categoryData], index) => {
-      return {
-        value:
-          totalExpenses > 0 ? (categoryData.amount / totalExpenses) * 100 : 0,
-        color: categoryData.color,
-        label: category,
-        focused: index === 0,
-      };
-    },
-  );
-
-  pieData.sort((a, b) => b.value - a.value);
-
-  return {
-    data: pieData,
-    totalExpenses,
-    period: {
-      from: startDate || null,
-      to: endDate || null,
-    },
-  };
-};
-
-const getIncomesExpensesTrend = async (
-  userId: string,
-  startDate?: string,
-  endDate?: string,
-): Promise<IncomesExpensesTrendChart> => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
-
-  if (!startDate || !endDate) {
+): Promise<CashFlowTrendChart> => {
+  const user = await userRepository.findUnique({ where: { id: userId } });
+  if (!user) throw NotFoundError('User not found');
+  if (!startDate || !endDate)
     throw NotFoundError('startDate and endDate are required');
-  }
 
   const snapshots = await dailySnapshotRepository.findMany({
     where: {
       userId,
-      date: {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
-      },
+      date: { gte: new Date(startDate), lte: new Date(endDate) },
     },
     orderBy: { date: 'asc' },
   });
 
   const snapshotMap = new Map(
-    snapshots.map((snapshot) => [
-      snapshot.date.toISOString().split('T')[0],
-      snapshot,
-    ]),
+    snapshots.map((s) => [s.date.toISOString().split('T')[0], s]),
   );
 
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const incomes = [];
-  const expenses = [];
+  const incomes: CashFlowTrendChart['incomes'] = [];
+  const expenses: CashFlowTrendChart['expenses'] = [];
 
   for (
-    let date = new Date(start);
-    date <= end;
+    let date = new Date(startDate);
+    date <= new Date(endDate);
     date.setDate(date.getDate() + 1)
   ) {
     const dateStr = date.toISOString().split('T')[0];
     const snapshot = snapshotMap.get(dateStr);
-
-    if (snapshot) {
-      incomes.push({
-        value: snapshot.totalIncome,
-        dataPointText: snapshot.totalIncome.toString(),
-        label: formatDateLabel(dateStr),
-      });
-      expenses.push({
-        value: snapshot.totalExpense,
-        dataPointText: snapshot.totalExpense.toString(),
-        label: formatDateLabel(dateStr),
-      });
-    } else {
-      incomes.push({
-        value: 0,
-        dataPointText: '0',
-        label: formatDateLabel(dateStr),
-      });
-      expenses.push({
-        value: 0,
-        dataPointText: '0',
-        label: formatDateLabel(dateStr),
-      });
-    }
+    const point = {
+      date: dateStr,
+      label: formatDateLabel(dateStr),
+    };
+    incomes.push({ ...point, value: snapshot?.totalIncome ?? 0 });
+    expenses.push({ ...point, value: snapshot?.totalExpense ?? 0 });
   }
 
   return {
     incomes,
     expenses,
-    period: {
-      from: startDate,
-      to: endDate,
-    },
-  };
-};
-
-const getBalanceTrend = async (
-  userId: string,
-  startDate?: string,
-  endDate?: string,
-): Promise<BalanceTrendChart> => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
-
-  if (!startDate || !endDate) {
-    throw NotFoundError('startDate and endDate are required');
-  }
-
-  const snapshots = await dailySnapshotRepository.findMany({
-    where: {
-      userId,
-      date: {
-        gte: new Date(startDate),
-        lte: new Date(endDate),
-      },
-    },
-    orderBy: { date: 'asc' },
-  });
-
-  const snapshotMap = new Map(
-    snapshots.map((snapshot) => [
-      snapshot.date.toISOString().split('T')[0],
-      snapshot,
-    ]),
-  );
-
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const data = [];
-
-  let previousBalance = 0;
-  const firstSnapshot = await dailySnapshotRepository.findFirst({
-    where: {
-      userId,
-      date: {
-        lt: new Date(startDate),
-      },
-    },
-    orderBy: { date: 'desc' },
-  });
-
-  if (firstSnapshot) {
-    previousBalance = firstSnapshot.closingBalance;
-  }
-
-  for (
-    let date = new Date(start);
-    date <= end;
-    date.setDate(date.getDate() + 1)
-  ) {
-    const dateStr = date.toISOString().split('T')[0];
-    const snapshot = snapshotMap.get(dateStr);
-
-    if (snapshot) {
-      previousBalance = snapshot.closingBalance;
-      data.push({
-        value: snapshot.closingBalance,
-        label: formatDateLabel(dateStr),
-      });
-    } else {
-      data.push({
-        value: previousBalance,
-        label: formatDateLabel(dateStr),
-      });
-    }
-  }
-
-  return {
-    data,
-    period: {
-      from: startDate,
-      to: endDate,
-    },
+    currencyCode: user.mainCurrencyCode,
+    period: { from: startDate, to: endDate },
   };
 };
 
 export const reportsService = {
   getSummary,
-  getCategoryBarChartData,
-  getCategoryPieChartData,
-  getIncomesExpensesTrend,
-  getBalanceTrend,
+  getCategoryChart,
+  getCashFlowTrend,
 };
