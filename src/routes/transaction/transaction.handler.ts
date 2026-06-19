@@ -3,6 +3,7 @@ import {
   CreateTransferInput,
   ParseTextTransactionInput,
   UpdateTransactionInput,
+  UpdateTransferInput,
 } from '@/business';
 import { transactionService } from '@/business/services/transaction';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
@@ -189,9 +190,27 @@ const createTransfer = async (
   reply.send({ message: 'Transfer created successfully', data: result });
 };
 
+const updateTransfer = async (
+  req: FastifyRequest<{
+    Params: { transferGroupId: string };
+    Body: UpdateTransferInput;
+  }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { transferGroupId } = req.params;
+  const result = await transactionService.updateTransfer(
+    userId,
+    transferGroupId,
+    req.body,
+  );
+  reply.send({ message: 'Transfer updated successfully', data: result });
+};
+
 export const transactionHandler = {
   create,
   createTransfer,
+  updateTransfer,
   createFromText,
   createFromVoice,
   getAll,

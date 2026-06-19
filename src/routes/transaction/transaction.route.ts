@@ -11,6 +11,8 @@ import {
   parseTextTransactionResponseSchema,
   parseVoiceTransactionResponseSchema,
   updateTransactionResponseSchema,
+  updateTransferBodySchema,
+  updateTransferResponseSchema,
 } from '@/business';
 import { messageResponseSchema } from '@/business/lib';
 
@@ -60,6 +62,20 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.createTransfer,
+  );
+
+  fastify.put(
+    '/transfer/:transferGroupId',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Update a transfer by its group ID',
+        body: updateTransferBodySchema,
+        response: { 200: updateTransferResponseSchema },
+      },
+    },
+    transactionHandler.updateTransfer,
   );
 
   fastify.post(

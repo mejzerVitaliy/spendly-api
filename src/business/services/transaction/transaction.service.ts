@@ -262,11 +262,29 @@ const getById = async (userId: string, id: string) => {
     user.mainCurrencyCode,
   );
 
+  let pairedTransactionWalletId: string | null = null;
+  let pairedTransactionCurrencyCode: string | null = null;
+  let pairedTransactionAmount: number | null = null;
+
+  if (transaction.transferGroupId) {
+    const paired = await transactionRepository.findFirst({
+      where: { transferGroupId: transaction.transferGroupId, id: { not: id } },
+    });
+    if (paired) {
+      pairedTransactionWalletId = paired.walletId;
+      pairedTransactionCurrencyCode = paired.currencyCode;
+      pairedTransactionAmount = paired.amount;
+    }
+  }
+
   return {
     ...transaction,
     date: transaction.date.toISOString(),
     convertedAmount: Math.round(convertedAmount),
     mainCurrencyCode: user.mainCurrencyCode,
+    pairedTransactionWalletId,
+    pairedTransactionCurrencyCode,
+    pairedTransactionAmount,
   };
 };
 
@@ -662,9 +680,150 @@ const createFromVoice = async (
   return createFromText(userId, normalized.normalizedText);
 };
 
+interface UpdateTransferInput {
+  fromAmount: number;
+  date: string;
+  description?: string;
+}
+
+const updateTransfer = async (
+  userId: string,
+  transferGroupId: string,
+  input: UpdateTransferInput,
+) => {
+  const allTransactions = await transactionRepository.findMany({
+    where: { transferGroupId },
+  });
+
+  const expenseTx = allTransactions.find(
+    (t) => t.type === TransactionType.EXPENSE,
+  );
+  const incomeTx = allTransactions.find(
+    (t) => t.type === TransactionType.INCOME,
+  );
+
+  if (!expenseTx || !incomeTx) throw NotFoundError('Transfer not found');
+  if (expenseTx.userId !== userId) throw NotFoundError('Transfer not found');
+
+  const user = await userRepository.findUnique({ where: { id: userId } });
+  if (!user) throw NotFoundError('User not found');
+
+  const fromCurrency = expenseTx.currencyCode;
+  const toCurrency = incomeTx.currencyCode;
+
+  const newFromAmount = input.fromAmount;
+  const newToAmount =
+    fromCurrency === toCurrency
+      ? newFromAmount
+      : Math.round(
+          newFromAmount *
+            (await currencyService.getExchangeRate(fromCurrency, toCurrency)),
+        );
+
+  const newDate = new Date(input.date);
+  const newDescription =
+    input.description ?? expenseTx.description ?? undefined;
+
+  const [oldFromInMain, oldToInMain, newFromInMain, newToInMain] =
+    await Promise.all([
+      currencyService.convertAmount(
+        expenseTx.amount,
+        fromCurrency,
+        user.mainCurrencyCode,
+      ),
+      currencyService.convertAmount(
+        incomeTx.amount,
+        toCurrency,
+        user.mainCurrencyCode,
+      ),
+      currencyService.convertAmount(
+        newFromAmount,
+        fromCurrency,
+        user.mainCurrencyCode,
+      ),
+      currencyService.convertAmount(
+        newToAmount,
+        toCurrency,
+        user.mainCurrencyCode,
+      ),
+    ]);
+
+  return withUserLock(userId, async () => {
+    const freshUser = await userRepository.findUnique({
+      where: { id: userId },
+    });
+    if (!freshUser) throw NotFoundError('User not found');
+
+    await snapshotService.removeTransactionFromSnapshot(
+      userId,
+      expenseTx.date,
+      Math.round(oldFromInMain),
+      TransactionType.EXPENSE,
+    );
+    await snapshotService.removeTransactionFromSnapshot(
+      userId,
+      incomeTx.date,
+      Math.round(oldToInMain),
+      TransactionType.INCOME,
+    );
+
+    await transactionRepository.update({
+      where: { id: expenseTx.id },
+      data: {
+        amount: newFromAmount,
+        date: newDate,
+        description: newDescription,
+      },
+    });
+    await transactionRepository.update({
+      where: { id: incomeTx.id },
+      data: { amount: newToAmount, date: newDate, description: newDescription },
+    });
+
+    const balanceDelta = Math.round(
+      newToInMain - newFromInMain - oldToInMain + oldFromInMain,
+    );
+    await userRepository.update({
+      where: { id: userId },
+      data: { totalBalance: freshUser.totalBalance + balanceDelta },
+    });
+
+    await snapshotService.createOrUpdateSnapshot({
+      userId,
+      date: newDate,
+      amount: Math.round(newFromInMain),
+      type: TransactionType.EXPENSE,
+      currencyCode: user.mainCurrencyCode,
+    });
+    await snapshotService.createOrUpdateSnapshot({
+      userId,
+      date: newDate,
+      amount: Math.round(newToInMain),
+      type: TransactionType.INCOME,
+      currencyCode: user.mainCurrencyCode,
+    });
+
+    return {
+      fromTransaction: {
+        ...expenseTx,
+        amount: newFromAmount,
+        date: newDate.toISOString(),
+        description: newDescription ?? null,
+      },
+      toTransaction: {
+        ...incomeTx,
+        amount: newToAmount,
+        date: newDate.toISOString(),
+        description: newDescription ?? null,
+      },
+    };
+  });
+};
+
 export const transactionService = {
   create,
   createTransfer,
+  updateTransfer,
   createFromText,
   createFromVoice,
   getAll,

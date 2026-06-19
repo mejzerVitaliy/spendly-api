@@ -16,6 +16,9 @@ export const transactionBaseSchema = z.object({
   convertedAmount: z.number().optional(),
   mainCurrencyCode: z.string().length(3).optional(),
   transferGroupId: z.string().uuid().optional().nullable(),
+  pairedTransactionWalletId: z.string().uuid().optional().nullable(),
+  pairedTransactionCurrencyCode: z.string().optional().nullable(),
+  pairedTransactionAmount: z.number().optional().nullable(),
 });
 
 export const createTransactionBodySchema = z.object({
@@ -86,9 +89,25 @@ export const parseVoiceTransactionResponseSchema = createResponseWithDataSchema(
   z.array(transactionBaseSchema),
 );
 
+export const updateTransferBodySchema = z.object({
+  fromAmount: z.number().positive(),
+  date: z.string().datetime(),
+  description: z.string().optional(),
+});
+
+type UpdateTransferInput = z.infer<typeof updateTransferBodySchema>;
+
+export const updateTransferResponseSchema = createResponseWithDataSchema(
+  z.object({
+    fromTransaction: transactionBaseSchema,
+    toTransaction: transactionBaseSchema,
+  }),
+);
+
 export type {
   CreateTransactionInput,
   CreateTransferInput,
   UpdateTransactionInput,
+  UpdateTransferInput,
   ParseTextTransactionInput,
 };
