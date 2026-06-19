@@ -150,6 +150,7 @@ const getCategoryChart = async (
   startDate?: string,
   endDate?: string,
   type?: TransactionType,
+  language?: string,
 ): Promise<CategoryChart> => {
   const user = await userRepository.findUnique({ where: { id: userId } });
   if (!user) throw NotFoundError('User not found');
@@ -166,7 +167,7 @@ const getCategoryChart = async (
     include: { category: true },
   });
 
-  const categoryMap = new Map<string, { amount: number; color: string }>();
+  const categoryMap = new Map<string, { value: number; color: string }>();
   let total = 0;
 
   for (const transaction of transactions) {
@@ -175,24 +176,26 @@ const getCategoryChart = async (
       transaction.currencyCode,
       user.mainCurrencyCode,
     );
-    const label = transaction.category?.name || 'Unknown';
-    const color = transaction.category?.color || '#6B7280';
-    const existing = categoryMap.get(label) || { amount: 0, color };
+    const cat = transaction.category;
+    const label =
+      language === 'ru' && cat?.nameRu ? cat.nameRu : cat?.name || 'Unknown';
+    const color = cat?.color || '#6B7280';
+    const existing = categoryMap.get(label) || { value: 0, color };
     categoryMap.set(label, {
-      amount: existing.amount + convertedAmount,
+      value: existing.value + convertedAmount,
       color,
     });
     total += convertedAmount;
   }
 
   const data = Array.from(categoryMap.entries())
-    .map(([label, { amount, color }]) => ({
+    .map(([label, { value, color }]) => ({
       label,
-      amount,
+      value,
       color,
-      percentage: total > 0 ? Math.round((amount / total) * 100) : 0,
+      percentage: total > 0 ? Math.round((value / total) * 100) : 0,
     }))
-    .sort((a, b) => b.amount - a.amount)
+    .sort((a, b) => b.value - a.value)
     .slice(0, 7);
 
   return {

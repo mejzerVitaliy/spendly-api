@@ -29,13 +29,14 @@ const getCategoryChart = async (
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate, type } = req.query;
+  const { startDate, endDate, type, language } = req.query;
 
   const data = await reportsService.getCategoryChart(
     userId,
     startDate,
     endDate,
     type,
+    language,
   );
 
   reply.send({ message: 'Category chart fetched successfully', data });

@@ -6,3 +6,4 @@ export * from './reports';
 export * from './currency';
 export * from './category';
 export * from './wallet';
+export * from './analytics';

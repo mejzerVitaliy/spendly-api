@@ -4,6 +4,7 @@ import {
   UpdateTransactionInput,
 } from '@/business';
 import { transactionService } from '@/business/services/transaction';
+import { analyticsService } from '@/business/services/analytics/analytics.service';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -17,6 +18,8 @@ const create = async (
   const { body } = req;
 
   const transaction = await transactionService.create(userId, body);
+
+  analyticsService.track('transaction_created', userId, { type: body.type });
 
   const response = {
     message: 'Transaction created successfully',
@@ -105,9 +108,12 @@ const remove = async (
   }>,
   reply: FastifyReply,
 ) => {
+  const { userId } = req.user as JwtPayload;
   const { id } = req.params;
 
   await transactionService.remove(id);
+
+  analyticsService.track('transaction_deleted', userId);
 
   const response = {
     message: 'Transaction deleted successfully',
@@ -126,6 +132,11 @@ const createFromText = async (
   const { text } = req.body;
 
   const transactions = await transactionService.createFromText(userId, text);
+
+  analyticsService.track('ai_transaction_used', userId, {
+    method: 'text',
+    count: transactions.length,
+  });
 
   const response = {
     message: 'Transactions created from text successfully',
@@ -153,6 +164,11 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
     audioBuffer,
     filename,
   );
+
+  analyticsService.track('ai_transaction_used', userId, {
+    method: 'voice',
+    count: transactions.length,
+  });
 
   reply.send({
     message: 'Transactions created from voice successfully',

@@ -54,10 +54,11 @@ export const getCategoryChartQuerySchema = z.object({
     })
     .optional(),
   type: z.nativeEnum(TransactionType).optional(),
+  language: z.string().optional(),
 });
 
 export const categoryChartItemSchema = z.object({
-  amount: z.number(),
+  value: z.number(),
   percentage: z.number(),
   label: z.string(),
   color: z.string(),

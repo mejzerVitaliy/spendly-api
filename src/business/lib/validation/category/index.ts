@@ -5,6 +5,7 @@ import { createResponseWithDataSchema } from '../application';
 export const categorySchema = z.object({
   id: z.string().uuid(),
   name: z.string(),
+  nameRu: z.string().nullable().optional(),
   color: z.string(),
   type: z.nativeEnum(TransactionType),
   order: z.number(),

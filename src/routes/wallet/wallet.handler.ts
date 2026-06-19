@@ -4,6 +4,7 @@ import {
   SetDefaultWalletInput,
 } from '@/business';
 import { walletService } from '@/business/services/wallet';
+import { analyticsService } from '@/business/services/analytics/analytics.service';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -17,6 +18,8 @@ const create = async (
   const { body } = req;
 
   const wallet = await walletService.create(userId, body);
+
+  analyticsService.track('wallet_created', userId, { type: body.type });
 
   const response = {
     message: 'Wallet created successfully',

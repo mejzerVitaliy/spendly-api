@@ -9,6 +9,7 @@ import {
   UpgradeGuestInput,
 } from '@/business';
 import { authService } from '@/business/services/auth/auth.service';
+import { analyticsService } from '@/business/services/analytics/analytics.service';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
 import { TokenType } from '@prisma/client';
@@ -23,6 +24,10 @@ const guest = async (
 
   const { createdUser, accessToken, refreshToken } =
     await authService.createGuest(body);
+
+  analyticsService.track('guest_created', createdUser.id, {
+    currency: body.mainCurrencyCode,
+  });
 
   const response = {
     message: 'Guest user created successfully',
@@ -50,6 +55,8 @@ const upgradeGuest = async (
     body,
   );
 
+  analyticsService.track('account_upgraded', userId);
+
   const response = {
     message: 'Guest upgraded to registered user successfully',
     data: {
@@ -73,6 +80,8 @@ const register = async (
   const { createdUser, accessToken, refreshToken } =
     await authService.register(body);
 
+  analyticsService.track('signup_completed', createdUser.id);
+
   const response = {
     message: 'User is registered successfully',
     data: {
@@ -94,6 +103,8 @@ const login = async (
   const { body } = request;
 
   const data = await authService.login(body);
+
+  analyticsService.track('login_completed', data.user?.id);
 
   const response = {
     message: 'User is logged in successfully',
@@ -146,6 +157,8 @@ const logout = async (request: FastifyRequest, reply: FastifyReply) => {
   const { userId } = request.user as JwtPayload;
 
   await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
+
+  analyticsService.track('logout', userId);
 
   const response = {
     message: 'User is logged out successfully',

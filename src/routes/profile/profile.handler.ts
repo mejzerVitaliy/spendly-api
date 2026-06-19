@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { userRepository } from '@/database/repositories/user';
 import { currencyService } from '@/business/services/currency';
 import { tokenService } from '@/business/services/tokens/token.service';
+import { analyticsService } from '@/business/services/analytics/analytics.service';
 import { BadRequestError } from '@/business/lib';
 import { TokenType } from '@prisma/client';
 
@@ -19,6 +20,10 @@ const updateSettings = async (
   await userRepository.update({
     where: { id: userId },
     data: { mainCurrencyCode },
+  });
+
+  analyticsService.track('currency_changed', userId, {
+    currency: mainCurrencyCode,
   });
 
   reply.send({ message: 'Settings updated successfully' });
@@ -43,6 +48,8 @@ const updateEmail = async (
     where: { id: userId },
     data: { email },
   });
+
+  analyticsService.track('email_updated', userId);
 
   reply.send({ message: 'Email updated successfully' });
 };
@@ -74,11 +81,15 @@ const changePassword = async (
     data: { password: hashed },
   });
 
+  analyticsService.track('password_changed', userId);
+
   reply.send({ message: 'Password changed successfully' });
 };
 
 const deleteAccount = async (req: FastifyRequest, reply: FastifyReply) => {
   const { userId } = req.user as JwtPayload;
+
+  analyticsService.track('account_deleted', userId);
 
   await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
   await userRepository.delete({ where: { id: userId } });

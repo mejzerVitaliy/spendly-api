@@ -4,3 +4,4 @@ export * from './currency';
 export * from './user';
 export * from './category';
 export * from './wallet';
+export * from './analytics';

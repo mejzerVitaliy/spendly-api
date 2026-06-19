@@ -187,6 +187,7 @@ model UserFavoriteCurrency {
 model Category {
   id     String       @id @default(uuid()) @db.Uuid
   name   String       @unique
+  nameRu String?      @map("name_ru")
   color  String
   type   TransactionType
   order  Int          @default(0)
@@ -212,4 +213,17 @@ model UserFavoriteCategory {
   @@unique([userId, categoryId])
   @@index([userId])
   @@map("user_favorite_categories")
+}
+
+model AnalyticsEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String?  @map("user_id") @db.Uuid
+  event      String
+  properties Json?    @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([event])
+  @@index([createdAt])
+  @@index([userId])
+  @@map("analytics_events")
 }
