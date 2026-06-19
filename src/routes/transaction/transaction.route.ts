@@ -3,6 +3,8 @@ import { transactionHandler } from './transaction.handler';
 import {
   createTransactionBodySchema,
   createTransactionResponseSchema,
+  createTransferBodySchema,
+  createTransferResponseSchema,
   getAllTransactionsResponseSchema,
   getTransactionByIdResponseSchema,
   parseTextTransactionBodySchema,
@@ -42,6 +44,22 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.getAll,
+  );
+
+  fastify.post(
+    '/transfer',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Create a transfer between wallets',
+        body: createTransferBodySchema,
+        response: {
+          200: createTransferResponseSchema,
+        },
+      },
+    },
+    transactionHandler.createTransfer,
   );
 
   fastify.post(

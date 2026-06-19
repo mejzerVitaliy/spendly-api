@@ -1,5 +1,6 @@
 import {
   CreateTransactionInput,
+  CreateTransferInput,
   ParseTextTransactionInput,
   UpdateTransactionInput,
 } from '@/business';
@@ -176,8 +177,21 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   });
 };
 
+const createTransfer = async (
+  req: FastifyRequest<{ Body: CreateTransferInput }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const result = await transactionService.createTransfer(userId, req.body);
+
+  analyticsService.track('transaction_created', userId, { type: 'TRANSFER' });
+
+  reply.send({ message: 'Transfer created successfully', data: result });
+};
+
 export const transactionHandler = {
   create,
+  createTransfer,
   createFromText,
   createFromVoice,
   getAll,

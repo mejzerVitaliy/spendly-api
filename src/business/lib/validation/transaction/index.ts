@@ -8,13 +8,14 @@ export const transactionBaseSchema = z.object({
   amount: z.number(),
   date: z.string().datetime(),
   currencyCode: z.string().length(3),
-  description: z.string().optional(),
-  categoryId: z.string().uuid(),
-  category: categorySchema.optional(),
+  description: z.string().optional().nullable(),
+  categoryId: z.string().uuid().optional().nullable(),
+  category: categorySchema.optional().nullable(),
   walletId: z.string().uuid(),
   type: z.nativeEnum(TransactionType),
   convertedAmount: z.number().optional(),
   mainCurrencyCode: z.string().length(3).optional(),
+  transferGroupId: z.string().uuid().optional().nullable(),
 });
 
 export const createTransactionBodySchema = z.object({
@@ -31,6 +32,28 @@ type CreateTransactionInput = z.infer<typeof createTransactionBodySchema>;
 
 export const createTransactionResponseSchema = createResponseWithDataSchema(
   transactionBaseSchema,
+);
+
+export const createTransferBodySchema = z.object({
+  fromWalletId: z.string().uuid(),
+  toWalletId: z.string().uuid(),
+  fromAmount: z.number().positive(),
+  date: z.string().datetime(),
+  description: z.string().optional(),
+});
+
+type CreateTransferInput = z.infer<typeof createTransferBodySchema>;
+
+export const createTransferResponseSchema = createResponseWithDataSchema(
+  z.object({
+    fromTransaction: transactionBaseSchema,
+    toTransaction: transactionBaseSchema,
+    exchangeRate: z.number(),
+    fromCurrencyCode: z.string(),
+    toCurrencyCode: z.string(),
+    fromAmount: z.number(),
+    toAmount: z.number(),
+  }),
 );
 
 export const getAllTransactionsResponseSchema = createResponseWithDataSchema(
@@ -65,6 +88,7 @@ export const parseVoiceTransactionResponseSchema = createResponseWithDataSchema(
 
 export type {
   CreateTransactionInput,
+  CreateTransferInput,
   UpdateTransactionInput,
   ParseTextTransactionInput,
 };

@@ -97,10 +97,23 @@ const updateUserFavoriteCurrencies = async (
   reply.send(response);
 };
 
+const getRate = async (
+  req: FastifyRequest<{ Querystring: { from: string; to: string } }>,
+  reply: FastifyReply,
+) => {
+  const { from, to } = req.query;
+  const rate = await currencyService.getExchangeRate(from, to);
+  reply.send({
+    message: 'Rate fetched successfully',
+    data: { rate, from, to },
+  });
+};
+
 export const currencyHandler = {
   getAllCurrencies,
   getUserFavoriteCurrencies,
   addUserFavoriteCurrency,
   removeUserFavoriteCurrency,
   updateUserFavoriteCurrencies,
+  getRate,
 };

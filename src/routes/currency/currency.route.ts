@@ -86,4 +86,24 @@ export const currencyRoute = async (fastify: FastifyInstance) => {
     },
     currencyHandler.updateUserFavoriteCurrencies,
   );
+
+  fastify.get(
+    '/rate',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['Currency'],
+        summary: 'Get exchange rate between two currencies',
+        querystring: {
+          type: 'object',
+          properties: {
+            from: { type: 'string' },
+            to: { type: 'string' },
+          },
+          required: ['from', 'to'],
+        },
+      },
+    },
+    currencyHandler.getRate,
+  );
 };

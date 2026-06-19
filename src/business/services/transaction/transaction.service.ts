@@ -1,9 +1,11 @@
 import {
   CreateTransactionInput,
+  CreateTransferInput,
   NotFoundError,
   UpdateTransactionInput,
   BadRequestError,
 } from '@/business/lib';
+import { randomUUID } from 'crypto';
 import {
   categoryRepository,
   transactionRepository,
@@ -356,12 +358,42 @@ const update = async (id: string, input: UpdateTransactionInput) => {
   };
 };
 
+const removeSingle = async (
+  transaction: {
+    id: string;
+    userId: string;
+    amount: number;
+    currencyCode: string;
+    type: TransactionType;
+    date: Date;
+  },
+  user: { id: string; totalBalance: number; mainCurrencyCode: string },
+) => {
+  const convertedAmount = await currencyService.convertAmount(
+    transaction.amount,
+    transaction.currencyCode,
+    user.mainCurrencyCode,
+  );
+
+  const delta =
+    transaction.type === TransactionType.INCOME
+      ? -convertedAmount
+      : convertedAmount;
+
+  await snapshotService.removeTransactionFromSnapshot(
+    transaction.userId,
+    transaction.date,
+    convertedAmount,
+    transaction.type,
+  );
+
+  await transactionRepository.delete({ where: { id: transaction.id } });
+
+  return delta;
+};
+
 const remove = async (id: string) => {
-  const transaction = await transactionRepository.findUnique({
-    where: {
-      id,
-    },
-  });
+  const transaction = await transactionRepository.findUnique({ where: { id } });
 
   if (!transaction) {
     throw NotFoundError('Transaction not found');
@@ -371,46 +403,159 @@ const remove = async (id: string) => {
     where: { id: transaction.userId },
   });
 
-  if (!transaction) {
-    throw NotFoundError('Transaction not found');
-  }
-
   if (!user) {
     throw NotFoundError('User not found');
   }
 
-  const convertedAmount = await currencyService.convertAmount(
-    transaction.amount,
-    transaction.currencyCode,
-    user.mainCurrencyCode,
-  );
+  return withUserLock(transaction.userId, async () => {
+    const freshUser = await userRepository.findUnique({
+      where: { id: transaction.userId },
+    });
+    if (!freshUser) throw NotFoundError('User not found');
 
-  let totalBalance;
+    let balanceDelta = await removeSingle(transaction, freshUser);
 
-  if (transaction.type === TransactionType.INCOME) {
-    totalBalance = user.totalBalance - convertedAmount;
+    // If this is part of a transfer, also remove the paired transaction
+    if (transaction.transferGroupId) {
+      const paired = await transactionRepository.findFirst({
+        where: {
+          transferGroupId: transaction.transferGroupId,
+          id: { not: id },
+        },
+      });
+
+      if (paired) {
+        balanceDelta += await removeSingle(paired, freshUser);
+      }
+    }
+
+    await userRepository.update({
+      where: { id: transaction.userId },
+      data: { totalBalance: freshUser.totalBalance + Math.round(balanceDelta) },
+    });
+  });
+};
+
+const createTransfer = async (userId: string, input: CreateTransferInput) => {
+  const { fromWalletId, toWalletId, fromAmount, date, description } = input;
+
+  const [fromWallet, toWallet] = await Promise.all([
+    walletRepository.findFirst({
+      where: { id: fromWalletId, userId, isArchived: false },
+    }),
+    walletRepository.findFirst({
+      where: { id: toWalletId, userId, isArchived: false },
+    }),
+  ]);
+
+  if (!fromWallet) throw new BadRequestError('Source wallet not found');
+  if (!toWallet) throw new BadRequestError('Destination wallet not found');
+  if (fromWalletId === toWalletId)
+    throw new BadRequestError(
+      'Source and destination wallets must be different',
+    );
+
+  const user = await userRepository.findUnique({ where: { id: userId } });
+  if (!user) throw NotFoundError('User not found');
+
+  const fromCurrency = fromWallet.currencyCode;
+  const toCurrency = toWallet.currencyCode;
+
+  let toAmount: number;
+  let exchangeRate: number;
+
+  if (fromCurrency === toCurrency) {
+    exchangeRate = 1;
+    toAmount = fromAmount;
   } else {
-    totalBalance = user.totalBalance + convertedAmount;
+    exchangeRate = await currencyService.getExchangeRate(
+      fromCurrency,
+      toCurrency,
+    );
+    toAmount = Math.round(fromAmount * exchangeRate);
   }
 
-  await userRepository.update({
-    where: { id: transaction.userId },
-    data: {
-      totalBalance,
-    },
-  });
+  const transferGroupId = randomUUID();
+  const transactionDate = new Date(date);
 
-  await snapshotService.removeTransactionFromSnapshot(
-    transaction.userId,
-    transaction.date,
-    convertedAmount,
-    transaction.type,
-  );
+  const [fromAmountInMain, toAmountInMain] = await Promise.all([
+    currencyService.convertAmount(
+      fromAmount,
+      fromCurrency,
+      user.mainCurrencyCode,
+    ),
+    currencyService.convertAmount(toAmount, toCurrency, user.mainCurrencyCode),
+  ]);
 
-  await transactionRepository.delete({
-    where: {
-      id,
-    },
+  return withUserLock(userId, async () => {
+    const freshUser = await userRepository.findUnique({
+      where: { id: userId },
+    });
+    if (!freshUser) throw NotFoundError('User not found');
+
+    const fromTransaction = await transactionRepository.create({
+      data: {
+        userId,
+        walletId: fromWalletId,
+        amount: fromAmount,
+        currencyCode: fromCurrency,
+        type: TransactionType.EXPENSE,
+        date: transactionDate,
+        description,
+        transferGroupId,
+      },
+    });
+
+    const toTransaction = await transactionRepository.create({
+      data: {
+        userId,
+        walletId: toWalletId,
+        amount: toAmount,
+        currencyCode: toCurrency,
+        type: TransactionType.INCOME,
+        date: transactionDate,
+        description,
+        transferGroupId,
+      },
+    });
+
+    // Net effect on total balance: +toAmountInMain - fromAmountInMain
+    const balanceDelta = Math.round(toAmountInMain - fromAmountInMain);
+    await userRepository.update({
+      where: { id: userId },
+      data: { totalBalance: freshUser.totalBalance + balanceDelta },
+    });
+
+    await snapshotService.createOrUpdateSnapshot({
+      userId,
+      date: transactionDate,
+      amount: Math.round(fromAmountInMain),
+      type: TransactionType.EXPENSE,
+      currencyCode: user.mainCurrencyCode,
+    });
+    await snapshotService.createOrUpdateSnapshot({
+      userId,
+      date: transactionDate,
+      amount: Math.round(toAmountInMain),
+      type: TransactionType.INCOME,
+      currencyCode: user.mainCurrencyCode,
+    });
+
+    return {
+      fromTransaction: {
+        ...fromTransaction,
+        date: fromTransaction.date.toISOString(),
+      },
+      toTransaction: {
+        ...toTransaction,
+        date: toTransaction.date.toISOString(),
+      },
+      exchangeRate,
+      fromCurrencyCode: fromCurrency,
+      toCurrencyCode: toCurrency,
+      fromAmount,
+      toAmount,
+    };
   });
 };
 
@@ -519,6 +664,7 @@ const createFromVoice = async (
 
 export const transactionService = {
   create,
+  createTransfer,
   createFromText,
   createFromVoice,
   getAll,

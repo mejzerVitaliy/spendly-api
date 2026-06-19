@@ -82,15 +82,17 @@ model Transaction {
   date         DateTime
   description  String?
 
-  categoryId   String    @map("category_id") @db.Uuid
-  category     Category  @relation(fields: [categoryId], references: [id])
+  categoryId   String?   @map("category_id") @db.Uuid
+  category     Category? @relation(fields: [categoryId], references: [id])
   type         TransactionType
 
   walletId     String    @map("wallet_id") @db.Uuid
   wallet       Wallet    @relation(fields: [walletId], references: [id])
 
   currencyCode String    @default("USD") @map("currency_code") @db.VarChar(3)
-  currency     Currency @relation(fields: [currencyCode], references: [code])
+  currency     Currency  @relation(fields: [currencyCode], references: [code])
+
+  transferGroupId String? @map("transfer_group_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
@@ -99,6 +101,7 @@ model Transaction {
 
   @@index([userId])
   @@index([walletId])
+  @@index([transferGroupId])
   @@map("transactions")
 }
 
