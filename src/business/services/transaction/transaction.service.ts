@@ -12,11 +12,7 @@ import {
   userRepository,
   walletRepository,
 } from '@/database/repositories';
-import {
-  normalizeVoiceText,
-  parseTextTransaction,
-  transcribeAudio,
-} from '@/bootstrap/openai';
+import { parseTransaction, transcribeAudio } from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
@@ -194,9 +190,7 @@ const getAll = async (params: GetAllTransactionsParams) => {
     include: {
       category: true,
     },
-    orderBy: {
-      date: 'desc',
-    },
+    orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
   });
 
   if (!transactions) {
@@ -579,28 +573,49 @@ const createTransfer = async (userId: string, input: CreateTransferInput) => {
 
 const DEFAULT_CATEGORY_NAME = 'Unexpected Expenses';
 
-const createFromText = async (userId: string, text: string) => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
+const getParseContext = async (userId: string) => {
+  const [user, categories, wallets] = await Promise.all([
+    userRepository.findUnique({ where: { id: userId } }),
+    categoryRepository.findMany({
+      select: { id: true, name: true, type: true },
+    }),
+    walletRepository.findMany({
+      where: { userId, isArchived: false },
+      select: { id: true, name: true, currencyCode: true },
+    }),
+  ]);
 
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
+  if (!user) throw NotFoundError('User not found');
 
-  const categories = await categoryRepository.findMany({
-    select: { id: true, name: true, type: true },
-  });
-
-  const parsed = await parseTextTransaction({
-    mainCurrency: user.mainCurrencyCode,
-    todayDate: new Date().toISOString().split('T')[0],
+  return {
+    user,
     categories: categories.map((c) => ({
       id: c.id,
       name: c.name,
-      type: c.type,
+      type: c.type as string,
     })),
+    wallets: wallets.map((w) => ({
+      id: w.id,
+      name: w.name,
+      currencyCode: w.currencyCode,
+    })),
+  };
+};
+
+const createFromText = async (
+  userId: string,
+  text: string,
+  isVoice = false,
+) => {
+  const { user, categories, wallets } = await getParseContext(userId);
+
+  const parsed = await parseTransaction({
+    mainCurrency: user.mainCurrencyCode,
+    todayDate: new Date().toISOString().split('T')[0],
+    categories,
+    wallets,
     userText: text,
+    isVoice,
   });
 
   if (!parsed.success || parsed.transactions.length === 0) {
@@ -617,41 +632,38 @@ const createFromText = async (userId: string, text: string) => {
     throw new BadRequestError('Default category not found');
   }
 
-  const inputs = parsed.transactions.map((item) => ({
-    amount: item.amount,
-    currencyCode: item.currencyCode,
-    type: item.type,
-    categoryId: item.categoryId ?? fallbackCategory.id,
-    walletId: item.walletId ?? undefined,
-    description: item.description,
-    date: new Date(item.date).toISOString(),
-  }));
+  const created: any[] = [];
 
-  const preparedResults = await Promise.allSettled(
-    inputs.map((input) => prepareTransaction(userId, input)),
-  );
-
-  const prepared = preparedResults
-    .filter(
-      (r): r is PromiseFulfilledResult<PreparedTransaction> =>
-        r.status === 'fulfilled',
-    )
-    .map((r) => r.value);
-
-  if (prepared.length === 0) {
-    throw new BadRequestError('Failed to prepare any transactions');
-  }
-
-  const created: Awaited<ReturnType<typeof finalizeTransaction>>[] = [];
-
-  for (const p of prepared) {
+  for (const tx of parsed.transactions) {
     try {
-      const transaction = await withUserLock(userId, () =>
-        finalizeTransaction(userId, p),
-      );
-      created.push(transaction);
+      if (tx.transactionType === 'TRANSFER') {
+        if (!tx.walletId || !tx.toWalletId) continue;
+        const result = await createTransfer(userId, {
+          fromWalletId: tx.walletId,
+          toWalletId: tx.toWalletId,
+          fromAmount: tx.amount,
+          date: new Date(tx.date).toISOString(),
+          description: tx.description || undefined,
+        });
+        created.push(result.fromTransaction);
+      } else {
+        const input: CreateTransactionInput = {
+          amount: tx.amount,
+          currencyCode: tx.currencyCode,
+          type: tx.transactionType as TransactionType,
+          categoryId: tx.categoryId ?? fallbackCategory.id,
+          walletId: tx.walletId ?? undefined,
+          description: tx.description || undefined,
+          date: new Date(tx.date).toISOString(),
+        };
+        const prepared = await prepareTransaction(userId, input);
+        const transaction = await withUserLock(userId, () =>
+          finalizeTransaction(userId, prepared),
+        );
+        created.push(transaction);
+      }
     } catch {
-      // continue with remaining transactions
+      // continue with remaining
     }
   }
 
@@ -662,25 +674,59 @@ const createFromText = async (userId: string, text: string) => {
   return created;
 };
 
+const previewText = async (userId: string, text: string, isVoice = false) => {
+  const { user, categories, wallets } = await getParseContext(userId);
+
+  const parsed = await parseTransaction({
+    mainCurrency: user.mainCurrencyCode,
+    todayDate: new Date().toISOString().split('T')[0],
+    categories,
+    wallets,
+    userText: text,
+    isVoice,
+  });
+
+  if (!parsed.success || parsed.transactions.length === 0) {
+    throw new BadRequestError(parsed.error ?? 'Failed to parse transaction');
+  }
+
+  const fallbackCategory = await categoryRepository.findByName(
+    DEFAULT_CATEGORY_NAME,
+  );
+
+  const transactions = parsed.transactions.map((tx) => ({
+    ...tx,
+    categoryId:
+      tx.transactionType !== 'TRANSFER'
+        ? (tx.categoryId ?? fallbackCategory?.id ?? null)
+        : null,
+  }));
+
+  return { transactions };
+};
+
+const previewVoice = async (
+  userId: string,
+  audioBuffer: Buffer,
+  filename: string,
+) => {
+  const transcribedText = await transcribeAudio(audioBuffer, filename);
+  return previewText(userId, transcribedText, true);
+};
+
 const createFromVoice = async (
   userId: string,
   audioBuffer: Buffer,
   filename: string,
 ) => {
   const transcribedText = await transcribeAudio(audioBuffer, filename);
-
-  const normalized = await normalizeVoiceText(transcribedText);
-
-  if (!normalized.success || !normalized.normalizedText) {
-    throw new BadRequestError(
-      normalized.error ?? 'Failed to understand voice input. Please try again.',
-    );
-  }
-
-  return createFromText(userId, normalized.normalizedText);
+  // isVoice=true tells the parser to handle speech fillers/artifacts in its prompt
+  return createFromText(userId, transcribedText, true);
 };
 
 interface UpdateTransferInput {
+  fromWalletId?: string;
+  toWalletId?: string;
   fromAmount: number;
   date: string;
   description?: string;
@@ -708,8 +754,44 @@ const updateTransfer = async (
   const user = await userRepository.findUnique({ where: { id: userId } });
   if (!user) throw NotFoundError('User not found');
 
-  const fromCurrency = expenseTx.currencyCode;
-  const toCurrency = incomeTx.currencyCode;
+  // Resolve effective wallet IDs (fall back to existing if not provided)
+  const newFromWalletId = input.fromWalletId ?? expenseTx.walletId;
+  const newToWalletId = input.toWalletId ?? incomeTx.walletId;
+
+  if (newFromWalletId === newToWalletId) {
+    throw new BadRequestError(
+      'Source and destination wallets must be different',
+    );
+  }
+
+  // Fetch wallets to get their currencies (only if wallet changed)
+  const walletIdsToFetch = new Set<string>();
+  if (input.fromWalletId && input.fromWalletId !== expenseTx.walletId)
+    walletIdsToFetch.add(input.fromWalletId);
+  if (input.toWalletId && input.toWalletId !== incomeTx.walletId)
+    walletIdsToFetch.add(input.toWalletId);
+
+  const fetchedWallets =
+    walletIdsToFetch.size > 0
+      ? await walletRepository.findMany({
+          where: {
+            id: { in: [...walletIdsToFetch] },
+            userId,
+            isArchived: false,
+          },
+        })
+      : [];
+
+  const getWalletCurrency = (walletId: string, fallbackCurrency: string) => {
+    const found = fetchedWallets.find((w) => w.id === walletId);
+    return found ? found.currencyCode : fallbackCurrency;
+  };
+
+  const fromCurrency = getWalletCurrency(
+    newFromWalletId,
+    expenseTx.currencyCode,
+  );
+  const toCurrency = getWalletCurrency(newToWalletId, incomeTx.currencyCode);
 
   const newFromAmount = input.fromAmount;
   const newToAmount =
@@ -728,12 +810,12 @@ const updateTransfer = async (
     await Promise.all([
       currencyService.convertAmount(
         expenseTx.amount,
-        fromCurrency,
+        expenseTx.currencyCode,
         user.mainCurrencyCode,
       ),
       currencyService.convertAmount(
         incomeTx.amount,
-        toCurrency,
+        incomeTx.currencyCode,
         user.mainCurrencyCode,
       ),
       currencyService.convertAmount(
@@ -770,6 +852,8 @@ const updateTransfer = async (
     await transactionRepository.update({
       where: { id: expenseTx.id },
       data: {
+        walletId: newFromWalletId,
+        currencyCode: fromCurrency,
         amount: newFromAmount,
         date: newDate,
         description: newDescription,
@@ -777,7 +861,13 @@ const updateTransfer = async (
     });
     await transactionRepository.update({
       where: { id: incomeTx.id },
-      data: { amount: newToAmount, date: newDate, description: newDescription },
+      data: {
+        walletId: newToWalletId,
+        currencyCode: toCurrency,
+        amount: newToAmount,
+        date: newDate,
+        description: newDescription,
+      },
     });
 
     const balanceDelta = Math.round(
@@ -806,12 +896,16 @@ const updateTransfer = async (
     return {
       fromTransaction: {
         ...expenseTx,
+        walletId: newFromWalletId,
+        currencyCode: fromCurrency,
         amount: newFromAmount,
         date: newDate.toISOString(),
         description: newDescription ?? null,
       },
       toTransaction: {
         ...incomeTx,
+        walletId: newToWalletId,
+        currencyCode: toCurrency,
         amount: newToAmount,
         date: newDate.toISOString(),
         description: newDescription ?? null,
@@ -826,6 +920,8 @@ export const transactionService = {
   updateTransfer,
   createFromText,
   createFromVoice,
+  previewText,
+  previewVoice,
   getAll,
   getById,
   update,

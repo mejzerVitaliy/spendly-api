@@ -10,6 +10,7 @@ import {
   parseTextTransactionBodySchema,
   parseTextTransactionResponseSchema,
   parseVoiceTransactionResponseSchema,
+  previewTransactionsResponseSchema,
   updateTransactionResponseSchema,
   updateTransferBodySchema,
   updateTransferResponseSchema,
@@ -76,6 +77,35 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.updateTransfer,
+  );
+
+  fastify.post(
+    '/preview-text',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary:
+          'Preview (parse without creating) transactions from text using AI',
+        body: parseTextTransactionBodySchema,
+        response: { 200: previewTransactionsResponseSchema },
+      },
+    },
+    transactionHandler.previewFromText,
+  );
+
+  fastify.post(
+    '/preview-voice',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary:
+          'Preview (parse without creating) transactions from voice using AI',
+        response: { 200: previewTransactionsResponseSchema },
+      },
+    },
+    transactionHandler.previewFromVoice,
   );
 
   fastify.post(

@@ -207,12 +207,48 @@ const updateTransfer = async (
   reply.send({ message: 'Transfer updated successfully', data: result });
 };
 
+const previewFromText = async (
+  req: FastifyRequest<{ Body: ParseTextTransactionInput }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { text } = req.body;
+
+  const result = await transactionService.previewText(userId, text);
+
+  reply.send({ message: 'Transactions parsed successfully', data: result });
+};
+
+const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = req.user as JwtPayload;
+
+  const data = await req.file();
+
+  if (!data) {
+    reply.status(400).send({ message: 'Audio file is required' });
+    return;
+  }
+
+  const audioBuffer = await data.toBuffer();
+  const filename = data.filename || 'audio.m4a';
+
+  const result = await transactionService.previewVoice(
+    userId,
+    audioBuffer,
+    filename,
+  );
+
+  reply.send({ message: 'Voice parsed successfully', data: result });
+};
+
 export const transactionHandler = {
   create,
   createTransfer,
   updateTransfer,
   createFromText,
   createFromVoice,
+  previewFromText,
+  previewFromVoice,
   getAll,
   getById,
   update,

@@ -3,6 +3,27 @@ import { z } from 'zod';
 import { createResponseWithDataSchema } from '../application';
 import { categorySchema } from '../category';
 
+// ─── AI Preview Schemas ───────────────────────────────────────────────────────
+
+export const previewTransactionItemSchema = z.object({
+  transactionType: z.enum(['INCOME', 'EXPENSE', 'TRANSFER']),
+  amount: z.number(),
+  currencyCode: z.string(),
+  categoryId: z.string().optional().nullable(),
+  walletId: z.string().optional().nullable(),
+  toWalletId: z.string().optional().nullable(),
+  description: z.string(),
+  date: z.string(),
+});
+
+export const previewTransactionsResponseSchema = createResponseWithDataSchema(
+  z.object({
+    transactions: z.array(previewTransactionItemSchema),
+  }),
+);
+
+type PreviewTransactionItem = z.infer<typeof previewTransactionItemSchema>;
+
 export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
   amount: z.number(),
@@ -90,6 +111,8 @@ export const parseVoiceTransactionResponseSchema = createResponseWithDataSchema(
 );
 
 export const updateTransferBodySchema = z.object({
+  fromWalletId: z.string().uuid().optional(),
+  toWalletId: z.string().uuid().optional(),
   fromAmount: z.number().positive(),
   date: z.string().datetime(),
   description: z.string().optional(),
@@ -110,4 +133,5 @@ export type {
   UpdateTransactionInput,
   UpdateTransferInput,
   ParseTextTransactionInput,
+  PreviewTransactionItem,
 };
