@@ -50,12 +50,14 @@ model User {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  tokens             Token[]
-  transactions       Transaction[]
-  dailySnapshots     DailyBalanceSnapshot[]
-  favoriteCurrencies UserFavoriteCurrency[]
-  favoriteCategories UserFavoriteCategory[]
-  wallets            Wallet[]
+  tokens               Token[]
+  transactions         Transaction[]
+  dailySnapshots       DailyBalanceSnapshot[]
+  favoriteCurrencies   UserFavoriteCurrency[]
+  favoriteCategories   UserFavoriteCategory[]
+  wallets              Wallet[]
+  passwordResetTokens  PasswordResetToken[]
+  aiUsage              AiUsage[]
 
   @@map("users")
 }
@@ -94,6 +96,11 @@ model Transaction {
 
   transferGroupId String? @map("transfer_group_id") @db.Uuid
 
+  isRecurring          Boolean   @default(false) @map("is_recurring")
+  recurringPeriod      String?   @map("recurring_period")
+  nextRecurringDate    DateTime? @map("next_recurring_date")
+  createdFromRecurring Boolean   @default(false) @map("created_from_recurring")
+
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
@@ -102,6 +109,7 @@ model Transaction {
   @@index([userId])
   @@index([walletId])
   @@index([transferGroupId])
+  @@index([isRecurring, nextRecurringDate])
   @@map("transactions")
 }
 
@@ -229,4 +237,35 @@ model AnalyticsEvent {
   @@index([createdAt])
   @@index([userId])
   @@map("analytics_events")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model AiUsage {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @map("user_id") @db.Uuid
+  month            String
+  transactionCount Int      @default(0) @map("transaction_count")
+  insightCount     Int      @default(0) @map("insight_count")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@index([userId])
+  @@map("ai_usage")
 }

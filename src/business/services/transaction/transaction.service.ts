@@ -4,6 +4,7 @@ import {
   NotFoundError,
   UpdateTransactionInput,
   BadRequestError,
+  RecurringPeriod,
 } from '@/business/lib';
 import { randomUUID } from 'crypto';
 import {
@@ -130,11 +131,53 @@ const finalizeTransaction = async (
   return {
     ...transaction,
     date: transaction.date.toISOString(),
+    nextRecurringDate:
+      transaction.nextRecurringDate instanceof Date
+        ? transaction.nextRecurringDate.toISOString()
+        : (transaction.nextRecurringDate ?? null),
   };
 };
 
+function computeNextRecurringDate(from: Date, period: RecurringPeriod): Date {
+  const d = new Date(from);
+  switch (period) {
+    case 'DAILY':
+      d.setDate(d.getDate() + 1);
+      break;
+    case 'WEEKLY':
+      d.setDate(d.getDate() + 7);
+      break;
+    case 'BIWEEKLY':
+      d.setDate(d.getDate() + 14);
+      break;
+    case 'MONTHLY':
+      d.setMonth(d.getMonth() + 1);
+      break;
+    case 'SEMIANNUAL':
+      d.setMonth(d.getMonth() + 6);
+      break;
+    case 'ANNUAL':
+      d.setFullYear(d.getFullYear() + 1);
+      break;
+  }
+  return d;
+}
+
 const create = async (userId: string, input: CreateTransactionInput) => {
-  const prepared = await prepareTransaction(userId, input);
+  const nextRecurringDate =
+    input.isRecurring && input.recurringPeriod
+      ? computeNextRecurringDate(
+          new Date(input.date),
+          input.recurringPeriod as RecurringPeriod,
+        )
+      : undefined;
+
+  const enrichedInput = {
+    ...input,
+    nextRecurringDate: nextRecurringDate ?? null,
+  };
+
+  const prepared = await prepareTransaction(userId, enrichedInput as any);
   return withUserLock(userId, () => finalizeTransaction(userId, prepared));
 };
 
@@ -208,6 +251,10 @@ const getAll = async (params: GetAllTransactionsParams) => {
       const resultTransaction = {
         ...transaction,
         date: transaction.date.toISOString(),
+        nextRecurringDate:
+          transaction.nextRecurringDate instanceof Date
+            ? transaction.nextRecurringDate.toISOString()
+            : (transaction.nextRecurringDate ?? null),
         convertedAmount: Math.round(convertedAmount),
         mainCurrencyCode: user.mainCurrencyCode,
       };
@@ -274,6 +321,10 @@ const getById = async (userId: string, id: string) => {
   return {
     ...transaction,
     date: transaction.date.toISOString(),
+    nextRecurringDate:
+      transaction.nextRecurringDate instanceof Date
+        ? transaction.nextRecurringDate.toISOString()
+        : (transaction.nextRecurringDate ?? null),
     convertedAmount: Math.round(convertedAmount),
     mainCurrencyCode: user.mainCurrencyCode,
     pairedTransactionWalletId,
@@ -336,6 +387,14 @@ const update = async (id: string, input: UpdateTransactionInput) => {
     newBalance -= finalAmountConverted;
   }
 
+  const nextRecurringDateForUpdate =
+    input.isRecurring && input.recurringPeriod
+      ? computeNextRecurringDate(
+          updatedTransaction.date,
+          input.recurringPeriod as RecurringPeriod,
+        )
+      : null;
+
   await transactionRepository.update({
     where: { id },
     data: {
@@ -346,6 +405,11 @@ const update = async (id: string, input: UpdateTransactionInput) => {
       categoryId: updatedTransaction.categoryId,
       currencyCode: updatedTransaction.currencyCode,
       walletId: updatedTransaction.walletId,
+      isRecurring: input.isRecurring ?? false,
+      recurringPeriod: input.isRecurring
+        ? (input.recurringPeriod ?? null)
+        : null,
+      nextRecurringDate: nextRecurringDateForUpdate,
     },
   });
 
@@ -367,6 +431,13 @@ const update = async (id: string, input: UpdateTransactionInput) => {
   return {
     ...updatedTransaction,
     date: updatedTransaction.date.toISOString(),
+    nextRecurringDate:
+      updatedTransaction.nextRecurringDate instanceof Date
+        ? updatedTransaction.nextRecurringDate.toISOString()
+        : ((updatedTransaction.nextRecurringDate as
+            | string
+            | null
+            | undefined) ?? null),
   };
 };
 
@@ -655,6 +726,8 @@ const createFromText = async (
           walletId: tx.walletId ?? undefined,
           description: tx.description || undefined,
           date: new Date(tx.date).toISOString(),
+          isRecurring: false,
+          createdFromRecurring: false,
         };
         const prepared = await prepareTransaction(userId, input);
         const transaction = await withUserLock(userId, () =>
@@ -914,6 +987,145 @@ const updateTransfer = async (
   });
 };
 
+const getRecurringDue = async (userId: string) => {
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const transactions = await transactionRepository.findMany({
+    where: {
+      userId,
+      isRecurring: true,
+      nextRecurringDate: { lte: endOfToday },
+    },
+  });
+
+  return transactions.map((tx: any) => ({
+    ...tx,
+    date: tx.date instanceof Date ? tx.date.toISOString() : tx.date,
+    nextRecurringDate:
+      tx.nextRecurringDate instanceof Date
+        ? tx.nextRecurringDate.toISOString()
+        : tx.nextRecurringDate,
+  }));
+};
+
+const processRecurring = async (userId: string, transactionId: string) => {
+  const tx = await transactionRepository.findUnique({
+    where: { id: transactionId },
+  });
+
+  if (!tx || tx.userId !== userId) throw NotFoundError('Transaction not found');
+  if (!tx.isRecurring || !tx.recurringPeriod)
+    throw new BadRequestError('Not a recurring transaction');
+
+  const now = new Date();
+
+  // Create new transaction for today
+  const newInput: CreateTransactionInput = {
+    amount: tx.amount,
+    date: now.toISOString(),
+    currencyCode: tx.currencyCode,
+    type: tx.type as any,
+    categoryId: tx.categoryId!,
+    walletId: tx.walletId,
+    description: tx.description ?? undefined,
+    isRecurring: false,
+    recurringPeriod: null,
+    createdFromRecurring: true,
+  };
+
+  const prepared = await prepareTransaction(userId, newInput);
+  const created = await withUserLock(userId, () =>
+    finalizeTransaction(userId, prepared),
+  );
+
+  // Advance nextRecurringDate on the template
+  const nextDate = computeNextRecurringDate(
+    tx.nextRecurringDate ?? now,
+    tx.recurringPeriod as RecurringPeriod,
+  );
+
+  await transactionRepository.update({
+    where: { id: transactionId },
+    data: { nextRecurringDate: nextDate },
+  });
+
+  return {
+    created,
+    nextRecurringDate: nextDate.toISOString(),
+  };
+};
+
+const countCreatedFromRecurringToday = async (
+  userId: string,
+  startOfToday: Date,
+) => {
+  const txs = await transactionRepository.findMany({
+    where: {
+      userId,
+      createdFromRecurring: true,
+      createdAt: { gte: startOfToday },
+    },
+  });
+  return txs.length;
+};
+
+const processAllRecurringDue = async () => {
+  const endOfToday = new Date();
+  endOfToday.setHours(23, 59, 59, 999);
+
+  const dueTxs = await transactionRepository.findMany({
+    where: {
+      isRecurring: true,
+      nextRecurringDate: { lte: endOfToday },
+    },
+  });
+
+  let processed = 0;
+  let failed = 0;
+
+  for (const tx of dueTxs) {
+    try {
+      if (!tx.isRecurring || !tx.recurringPeriod || !tx.userId) continue;
+
+      const now = new Date();
+      const newInput: CreateTransactionInput = {
+        amount: tx.amount,
+        date: now.toISOString(),
+        currencyCode: tx.currencyCode,
+        type: tx.type as any,
+        categoryId: tx.categoryId!,
+        walletId: tx.walletId,
+        description: tx.description ?? undefined,
+        isRecurring: false,
+        recurringPeriod: null,
+        createdFromRecurring: true,
+      };
+
+      const prepared = await prepareTransaction(tx.userId, newInput);
+      await withUserLock(tx.userId, () =>
+        finalizeTransaction(tx.userId, prepared),
+      );
+
+      const nextDate = computeNextRecurringDate(
+        tx.nextRecurringDate ?? now,
+        tx.recurringPeriod as RecurringPeriod,
+      );
+
+      await transactionRepository.update({
+        where: { id: tx.id },
+        data: { nextRecurringDate: nextDate },
+      });
+
+      processed++;
+    } catch {
+      failed++;
+    }
+  }
+
+  return { processed, failed, total: dueTxs.length };
+};
+
 export const transactionService = {
   create,
   createTransfer,
@@ -926,4 +1138,8 @@ export const transactionService = {
   getById,
   update,
   remove,
+  getRecurringDue,
+  processRecurring,
+  processAllRecurringDue,
+  countCreatedFromRecurringToday,
 };

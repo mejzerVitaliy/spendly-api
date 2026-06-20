@@ -24,6 +24,16 @@ export const previewTransactionsResponseSchema = createResponseWithDataSchema(
 
 type PreviewTransactionItem = z.infer<typeof previewTransactionItemSchema>;
 
+export const RECURRING_PERIODS = [
+  'DAILY',
+  'WEEKLY',
+  'BIWEEKLY',
+  'MONTHLY',
+  'SEMIANNUAL',
+  'ANNUAL',
+] as const;
+export type RecurringPeriod = (typeof RECURRING_PERIODS)[number];
+
 export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
   amount: z.number(),
@@ -40,6 +50,10 @@ export const transactionBaseSchema = z.object({
   pairedTransactionWalletId: z.string().uuid().optional().nullable(),
   pairedTransactionCurrencyCode: z.string().optional().nullable(),
   pairedTransactionAmount: z.number().optional().nullable(),
+  isRecurring: z.boolean().optional(),
+  recurringPeriod: z.enum(RECURRING_PERIODS).optional().nullable(),
+  nextRecurringDate: z.string().datetime().optional().nullable(),
+  createdFromRecurring: z.boolean().optional(),
 });
 
 export const createTransactionBodySchema = z.object({
@@ -50,6 +64,9 @@ export const createTransactionBodySchema = z.object({
   categoryId: z.string().uuid(),
   walletId: z.string().uuid().optional(),
   type: z.nativeEnum(TransactionType),
+  isRecurring: z.boolean().optional().default(false),
+  recurringPeriod: z.enum(RECURRING_PERIODS).optional().nullable(),
+  createdFromRecurring: z.boolean().optional().default(false),
 });
 
 type CreateTransactionInput = z.infer<typeof createTransactionBodySchema>;

@@ -7,6 +7,7 @@ import {
 } from '@/business';
 import { transactionService } from '@/business/services/transaction';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
+import { usageService } from '@/business/services/usage/usage.service';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -133,7 +134,9 @@ const createFromText = async (
   const { userId } = req.user as JwtPayload;
   const { text } = req.body;
 
+  await usageService.checkTransactionLimit(userId);
   const transactions = await transactionService.createFromText(userId, text);
+  await usageService.incrementTransaction(userId);
 
   analyticsService.track('ai_transaction_used', userId, {
     method: 'text',
@@ -161,11 +164,13 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   const audioBuffer = await data.toBuffer();
   const filename = data.filename || 'audio.m4a';
 
+  await usageService.checkTransactionLimit(userId);
   const transactions = await transactionService.createFromVoice(
     userId,
     audioBuffer,
     filename,
   );
+  await usageService.incrementTransaction(userId);
 
   analyticsService.track('ai_transaction_used', userId, {
     method: 'voice',
@@ -214,7 +219,9 @@ const previewFromText = async (
   const { userId } = req.user as JwtPayload;
   const { text } = req.body;
 
+  await usageService.checkTransactionLimit(userId);
   const result = await transactionService.previewText(userId, text);
+  await usageService.incrementTransaction(userId);
 
   reply.send({ message: 'Transactions parsed successfully', data: result });
 };
@@ -232,13 +239,46 @@ const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   const audioBuffer = await data.toBuffer();
   const filename = data.filename || 'audio.m4a';
 
+  await usageService.checkTransactionLimit(userId);
   const result = await transactionService.previewVoice(
     userId,
     audioBuffer,
     filename,
   );
+  await usageService.incrementTransaction(userId);
 
   reply.send({ message: 'Voice parsed successfully', data: result });
+};
+
+const getRecurringDue = async (req: FastifyRequest, reply: FastifyReply) => {
+  const { userId } = req.user as JwtPayload;
+  const data = await transactionService.getRecurringDue(userId);
+  reply.send({ message: 'Recurring due transactions fetched', data });
+};
+
+const processRecurring = async (
+  req: FastifyRequest<{ Params: { id: string } }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { id } = req.params;
+  const result = await transactionService.processRecurring(userId, id);
+  reply.send({ message: 'Recurring transaction processed', data: result });
+};
+
+const getRecurringProcessedToday = async (
+  req: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const count = await transactionService.countCreatedFromRecurringToday(
+    userId,
+    startOfToday,
+  );
+  return reply.send({ data: { count } });
 };
 
 export const transactionHandler = {
@@ -253,4 +293,7 @@ export const transactionHandler = {
   getById,
   update,
   remove,
+  getRecurringDue,
+  processRecurring,
+  getRecurringProcessedToday,
 };

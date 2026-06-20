@@ -7,6 +7,8 @@ import {
   RegisterInput,
   UnauthorizedError,
   UpgradeGuestInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
 } from '@/business';
 import { authService } from '@/business/services/auth/auth.service';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
@@ -167,6 +169,59 @@ const logout = async (request: FastifyRequest, reply: FastifyReply) => {
   reply.send(response);
 };
 
+const forgotPassword = async (
+  request: FastifyRequest<{ Body: ForgotPasswordInput }>,
+  reply: FastifyReply,
+) => {
+  await authService.forgotPassword(request.body);
+
+  reply.send({ message: 'If that email exists, a reset link has been sent' });
+};
+
+const resetPasswordRedirect = async (
+  request: FastifyRequest<{ Querystring: { token?: string } }>,
+  reply: FastifyReply,
+) => {
+  const token = request.query.token ?? '';
+  const deepLink = `spendlymobile://reset-password?token=${encodeURIComponent(token)}`;
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Opening Spendly AI…</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #080808; color: #F2F2F2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { text-align: center; padding: 48px 32px; max-width: 360px; }
+    .logo { font-size: 28px; font-weight: 800; background: linear-gradient(135deg, #38E8FF, #22D3EE); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 32px; }
+    p { color: #737373; font-size: 15px; margin-bottom: 28px; line-height: 1.6; }
+    a.btn { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #38E8FF, #22D3EE, #0EA5C9); color: #080808; font-weight: 600; font-size: 15px; border-radius: 12px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">Spendly AI</div>
+    <p>Tap the button below to open the app and reset your password.</p>
+    <a class="btn" href="${deepLink}">Open Spendly AI →</a>
+  </div>
+  <script>setTimeout(function(){ window.location.href = "${deepLink}"; }, 300);</script>
+</body>
+</html>`;
+
+  reply.type('text/html').send(html);
+};
+
+const resetPassword = async (
+  request: FastifyRequest<{ Body: ResetPasswordInput }>,
+  reply: FastifyReply,
+) => {
+  await authService.resetPassword(request.body);
+
+  reply.send({ message: 'Password reset successfully' });
+};
+
 export const authHandler = {
   guest,
   upgradeGuest,
@@ -175,4 +230,7 @@ export const authHandler = {
   getMe,
   refresh,
   logout,
+  forgotPassword,
+  resetPassword,
+  resetPasswordRedirect,
 };

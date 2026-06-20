@@ -192,3 +192,133 @@ export const transcribeAudio = async (
 };
 
 export type { ParsedTransactionItem as ParsedAITransactionItem };
+
+// ─── Financial Insights ───────────────────────────────────────────────────────
+
+export interface FinancialInsightsPayload {
+  period: string;
+  currencyCode: string;
+  totalIncome: number;
+  totalExpense: number;
+  netChange: number;
+  totalTransactions: number;
+  incomeCount: number;
+  expenseCount: number;
+  topExpenses: Array<{ label: string; value: number; percentage: number }>;
+  topIncomes: Array<{ label: string; value: number; percentage: number }>;
+}
+
+export interface FinancialInsightItem {
+  icon: string;
+  title: string;
+  content: string;
+  type: 'overview' | 'pattern' | 'recommendation';
+}
+
+const VALID_INSIGHT_ICONS = [
+  'bar-chart-outline',
+  'eye-outline',
+  'bulb-outline',
+  'trending-up-outline',
+  'trending-down-outline',
+  'wallet-outline',
+  'shield-checkmark-outline',
+  'alert-circle-outline',
+  'star-outline',
+  'cash-outline',
+  'analytics-outline',
+];
+
+export const generateFinancialInsights = async (
+  data: FinancialInsightsPayload,
+  language: string,
+): Promise<FinancialInsightItem[]> => {
+  const isRu = language === 'ru';
+  const fmt = (cents: number) =>
+    (cents / 100).toLocaleString('en', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+  const c = data.currencyCode;
+
+  const topExpensesStr =
+    data.topExpenses.length > 0
+      ? data.topExpenses
+          .map((e) => `${e.label}: ${fmt(e.value)} ${c} (${e.percentage}%)`)
+          .join('; ')
+      : isRu
+        ? 'нет данных'
+        : 'no data';
+
+  const topIncomesStr =
+    data.topIncomes.length > 0
+      ? data.topIncomes
+          .map((i) => `${i.label}: ${fmt(i.value)} ${c} (${i.percentage}%)`)
+          .join('; ')
+      : isRu
+        ? 'нет данных'
+        : 'no data';
+
+  const lang = isRu
+    ? 'Ты персональный финансовый помощник в приложении Spendly. Отвечай СТРОГО на русском языке.'
+    : 'You are a personal finance coach inside Spendly app. Respond in English.';
+
+  const prompt = `${lang}
+
+Financial data (${data.period}):
+- ${isRu ? 'Доходы' : 'Income'}: ${fmt(data.totalIncome)} ${c}
+- ${isRu ? 'Расходы' : 'Expenses'}: ${fmt(data.totalExpense)} ${c}
+- ${isRu ? 'Итого' : 'Net'}: ${fmt(data.netChange)} ${c}
+- ${isRu ? 'Транзакций' : 'Transactions'}: ${data.totalTransactions} (${data.incomeCount} ${isRu ? 'доходов' : 'income'}, ${data.expenseCount} ${isRu ? 'расходов' : 'expense'})
+- ${isRu ? 'Топ расходы' : 'Top expenses'}: ${topExpensesStr}
+- ${isRu ? 'Топ доходы' : 'Top income'}: ${topIncomesStr}
+
+Return ONLY valid JSON, no markdown, no explanation:
+{
+  "insights": [
+    { "icon": "bar-chart-outline", "title": "...", "content": "...", "type": "overview" },
+    { "icon": "eye-outline", "title": "...", "content": "...", "type": "pattern" },
+    { "icon": "bulb-outline", "title": "...", "content": "...", "type": "recommendation" }
+  ]
+}
+
+Rules:
+- title: 3-5 words
+- content: 1-2 sentences, use real numbers from the data
+- type must be exactly: overview, pattern, or recommendation
+- icon must be one of: ${VALID_INSIGHT_ICONS.join(', ')}
+- Be specific and concrete, avoid generic advice`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.3,
+    max_tokens: 700,
+    response_format: { type: 'json_object' },
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const raw = response.choices[0]?.message?.content ?? '';
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw) as { insights?: unknown[] };
+    const validTypes = ['overview', 'pattern', 'recommendation'] as const;
+
+    return (parsed.insights ?? []).slice(0, 3).map((item) => {
+      const i = item as Record<string, unknown>;
+      const type = validTypes.includes(i.type as (typeof validTypes)[number])
+        ? (i.type as (typeof validTypes)[number])
+        : 'overview';
+      return {
+        icon: VALID_INSIGHT_ICONS.includes(i.icon as string)
+          ? (i.icon as string)
+          : 'bulb-outline',
+        title: typeof i.title === 'string' ? i.title : '',
+        content: typeof i.content === 'string' ? i.content : '',
+        type,
+      };
+    });
+  } catch {
+    return [];
+  }
+};

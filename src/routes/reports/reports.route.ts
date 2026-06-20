@@ -6,6 +6,8 @@ import {
   getCashFlowTrendChartResponseSchema,
   getReportsSummaryQuerySchema,
   getReportsSummaryResponseSchema,
+  getAiInsightsQuerySchema,
+  getAiInsightsResponseSchema,
 } from '@/business/lib';
 
 export const reportsRoutes = async (fastify: FastifyInstance) => {
@@ -49,5 +51,19 @@ export const reportsRoutes = async (fastify: FastifyInstance) => {
       },
     },
     reportsHandler.getCashFlowTrend,
+  );
+
+  fastify.get(
+    '/ai-insights',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['reports'],
+        summary: 'Generate AI financial insights for the given period',
+        querystring: getAiInsightsQuerySchema,
+        response: { 200: getAiInsightsResponseSchema },
+      },
+    },
+    reportsHandler.getAiInsights,
   );
 };

@@ -5,3 +5,4 @@ export * from './user';
 export * from './category';
 export * from './wallet';
 export * from './analytics';
+export * from './password-reset-token';

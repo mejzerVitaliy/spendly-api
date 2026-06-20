@@ -1,5 +1,8 @@
 import { userRepository } from '@/database/repositories/user';
+import { passwordResetTokenRepository } from '@/database/repositories/password-reset-token';
+import { environmentVariables } from '@/config';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import {
   ACCESS_TOKEN_EXPIRATION,
   REFRESH_TOKEN_EXPIRATION,
@@ -11,6 +14,8 @@ import {
   UnauthorizedError,
   GuestInput,
   UpgradeGuestInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
 } from '@/business/lib';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
@@ -234,6 +239,54 @@ const refresh = async (refreshToken: string) => {
   }
 };
 
+const forgotPassword = async ({ email }: ForgotPasswordInput) => {
+  const user = await userRepository.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+  });
+
+  if (user && user.email) {
+    await passwordResetTokenRepository.deleteMany({
+      where: { userId: user.id },
+    });
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+
+    await passwordResetTokenRepository.create({
+      data: {
+        userId: user.id,
+        token: rawToken,
+        expiresAt,
+      },
+    });
+
+    const resetUrl = `${environmentVariables.APPLICATION_URL}/api/auth/reset-password-redirect?token=${rawToken}`;
+    await emailService.sendResetPasswordEmail(user.email, resetUrl);
+  }
+};
+
+const resetPassword = async ({ token, password }: ResetPasswordInput) => {
+  const resetToken = await passwordResetTokenRepository.findFirst({
+    where: { token },
+  });
+
+  if (!resetToken || resetToken.usedAt || resetToken.expiresAt < new Date()) {
+    throw new BadRequestError('Invalid or expired reset token');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  await userRepository.update({
+    where: { id: resetToken.userId },
+    data: { password: hashedPassword },
+  });
+
+  await passwordResetTokenRepository.update({
+    where: { id: resetToken.id },
+    data: { usedAt: new Date() },
+  });
+};
+
 export const authService = {
   createGuest,
   upgradeGuest,
@@ -241,4 +294,6 @@ export const authService = {
   login,
   getMe,
   refresh,
+  forgotPassword,
+  resetPassword,
 };

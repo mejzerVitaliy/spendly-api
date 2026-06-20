@@ -11,6 +11,7 @@ const DefaultInternalServerError = createError(
   'Internal Server Error',
   500,
 );
+const LimitReachedError = createError('LIMIT_REACHED', '%s', 429);
 
 export {
   NotFoundError,
@@ -20,4 +21,5 @@ export {
   DefaultInternalServerError,
   BadRequestError,
   InternalServerError,
+  LimitReachedError,
 };

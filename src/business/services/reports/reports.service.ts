@@ -1,4 +1,5 @@
 import {
+  AiInsightsData,
   CategoryChart,
   CashFlowTrendChart,
   NotFoundError,
@@ -11,6 +12,7 @@ import {
 } from '@/database/repositories';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
+import { generateFinancialInsights } from '@/bootstrap/openai';
 
 const formatDateLabel = (dateStr: string): string => {
   const date = new Date(dateStr);
@@ -24,107 +26,75 @@ const getSummary = async (
   startDate?: string,
   endDate?: string,
 ): Promise<ReportsSummary> => {
-  const user = await userRepository.findUnique({
-    where: { id: userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
+  const user = await userRepository.findUnique({ where: { id: userId } });
+  if (!user) throw NotFoundError('User not found');
 
   const isAllTime = !startDate && !endDate;
 
-  if (isAllTime) {
-    const latestSnapshot = await dailySnapshotRepository.findFirst({
+  // Balance is still read from snapshots — transfers are net-zero so snapshot
+  // closing balances are always correct.
+  let totalBalance = user.totalBalance;
+  if (!isAllTime) {
+    const snapshots = await dailySnapshotRepository.findMany({
+      where: {
+        userId,
+        date: {
+          gte: startDate ? new Date(startDate) : undefined,
+          lte: endDate ? new Date(endDate) : undefined,
+        },
+      },
+      orderBy: { date: 'asc' },
+    });
+
+    if (snapshots.length > 0) {
+      totalBalance = snapshots[snapshots.length - 1].closingBalance;
+    } else {
+      const before = await dailySnapshotRepository.findFirst({
+        where: {
+          userId,
+          date: { lt: startDate ? new Date(startDate) : undefined },
+        },
+        orderBy: { date: 'desc' },
+      });
+      totalBalance = before?.closingBalance ?? 0;
+    }
+  } else {
+    const latest = await dailySnapshotRepository.findFirst({
       where: { userId },
       orderBy: { date: 'desc' },
     });
-
-    if (!latestSnapshot) {
-      return {
-        totalBalance: user.totalBalance,
-        currencyCode: user.mainCurrencyCode,
-        totalIncome: 0,
-        totalExpense: 0,
-        netChange: 0,
-        incomeCount: 0,
-        expenseCount: 0,
-        totalTransactions: 0,
-        period: {
-          startDate: null,
-          endDate: null,
-          isAllTime: true,
-        },
-      };
-    }
-
-    const allSnapshots = await dailySnapshotRepository.findMany({
-      where: { userId },
-    });
-
-    const totalIncome = allSnapshots.reduce((sum, s) => sum + s.totalIncome, 0);
-    const totalExpense = allSnapshots.reduce(
-      (sum, s) => sum + s.totalExpense,
-      0,
-    );
-    const incomeCount = allSnapshots.reduce((sum, s) => sum + s.incomeCount, 0);
-    const expenseCount = allSnapshots.reduce(
-      (sum, s) => sum + s.expenseCount,
-      0,
-    );
-
-    return {
-      totalBalance: latestSnapshot.closingBalance,
-      currencyCode: user.mainCurrencyCode,
-      totalIncome,
-      totalExpense,
-      netChange: totalIncome - totalExpense,
-      incomeCount,
-      expenseCount,
-      totalTransactions: incomeCount + expenseCount,
-      period: {
-        startDate: null,
-        endDate: null,
-        isAllTime: true,
-      },
-    };
+    if (latest) totalBalance = latest.closingBalance;
   }
 
-  const snapshots = await dailySnapshotRepository.findMany({
+  // Income / expense are computed directly from transactions, excluding transfers.
+  const transactions = await transactionRepository.findMany({
     where: {
       userId,
+      transferGroupId: null,
       date: {
         gte: startDate ? new Date(startDate) : undefined,
         lte: endDate ? new Date(endDate) : undefined,
       },
     },
-    orderBy: { date: 'asc' },
   });
 
-  const totalIncome = snapshots.reduce((sum, s) => sum + s.totalIncome, 0);
-  const totalExpense = snapshots.reduce((sum, s) => sum + s.totalExpense, 0);
-  const incomeCount = snapshots.reduce((sum, s) => sum + s.incomeCount, 0);
-  const expenseCount = snapshots.reduce((sum, s) => sum + s.expenseCount, 0);
+  let totalIncome = 0;
+  let totalExpense = 0;
+  let incomeCount = 0;
+  let expenseCount = 0;
 
-  let totalBalance = 0;
-
-  if (snapshots.length > 0) {
-    totalBalance = snapshots[snapshots.length - 1].closingBalance;
-  } else {
-    const snapshotBeforePeriod = await dailySnapshotRepository.findFirst({
-      where: {
-        userId,
-        date: {
-          lt: startDate ? new Date(startDate) : undefined,
-        },
-      },
-      orderBy: { date: 'desc' },
-    });
-
-    if (snapshotBeforePeriod) {
-      totalBalance = snapshotBeforePeriod.closingBalance;
+  for (const tx of transactions) {
+    const converted = await currencyService.convertAmount(
+      tx.amount,
+      tx.currencyCode,
+      user.mainCurrencyCode,
+    );
+    if (tx.type === TransactionType.INCOME) {
+      totalIncome += converted;
+      incomeCount++;
     } else {
-      totalBalance = 0;
+      totalExpense += converted;
+      expenseCount++;
     }
   }
 
@@ -140,7 +110,7 @@ const getSummary = async (
     period: {
       startDate: startDate || null,
       endDate: endDate || null,
-      isAllTime: false,
+      isAllTime,
     },
   };
 };
@@ -159,6 +129,8 @@ const getCategoryChart = async (
     where: {
       userId,
       type: type || TransactionType.EXPENSE,
+      transferGroupId: null,
+      categoryId: { not: null },
       date: {
         gte: startDate ? new Date(startDate) : undefined,
         lte: endDate ? new Date(endDate) : undefined,
@@ -171,15 +143,16 @@ const getCategoryChart = async (
   let total = 0;
 
   for (const transaction of transactions) {
+    const cat = transaction.category;
+    if (!cat) continue;
+
     const convertedAmount = await currencyService.convertAmount(
       transaction.amount,
       transaction.currencyCode,
       user.mainCurrencyCode,
     );
-    const cat = transaction.category;
-    const label =
-      language === 'ru' && cat?.nameRu ? cat.nameRu : cat?.name || 'Unknown';
-    const color = cat?.color || '#6B7280';
+    const label = language === 'ru' && cat.nameRu ? cat.nameRu : cat.name;
+    const color = cat.color;
     const existing = categoryMap.get(label) || { value: 0, color };
     categoryMap.set(label, {
       value: existing.value + convertedAmount,
@@ -216,17 +189,31 @@ const getCashFlowTrend = async (
   if (!startDate || !endDate)
     throw NotFoundError('startDate and endDate are required');
 
-  const snapshots = await dailySnapshotRepository.findMany({
+  // Query transactions directly, excluding transfers.
+  const transactions = await transactionRepository.findMany({
     where: {
       userId,
+      transferGroupId: null,
       date: { gte: new Date(startDate), lte: new Date(endDate) },
     },
-    orderBy: { date: 'asc' },
   });
 
-  const snapshotMap = new Map(
-    snapshots.map((s) => [s.date.toISOString().split('T')[0], s]),
-  );
+  const incomeByDate = new Map<string, number>();
+  const expenseByDate = new Map<string, number>();
+
+  for (const tx of transactions) {
+    const dateStr = tx.date.toISOString().split('T')[0];
+    const converted = await currencyService.convertAmount(
+      tx.amount,
+      tx.currencyCode,
+      user.mainCurrencyCode,
+    );
+    if (tx.type === TransactionType.INCOME) {
+      incomeByDate.set(dateStr, (incomeByDate.get(dateStr) ?? 0) + converted);
+    } else {
+      expenseByDate.set(dateStr, (expenseByDate.get(dateStr) ?? 0) + converted);
+    }
+  }
 
   const incomes: CashFlowTrendChart['incomes'] = [];
   const expenses: CashFlowTrendChart['expenses'] = [];
@@ -237,13 +224,17 @@ const getCashFlowTrend = async (
     date.setDate(date.getDate() + 1)
   ) {
     const dateStr = date.toISOString().split('T')[0];
-    const snapshot = snapshotMap.get(dateStr);
-    const point = {
+    const label = formatDateLabel(dateStr);
+    incomes.push({
       date: dateStr,
-      label: formatDateLabel(dateStr),
-    };
-    incomes.push({ ...point, value: snapshot?.totalIncome ?? 0 });
-    expenses.push({ ...point, value: snapshot?.totalExpense ?? 0 });
+      label,
+      value: incomeByDate.get(dateStr) ?? 0,
+    });
+    expenses.push({
+      date: dateStr,
+      label,
+      value: expenseByDate.get(dateStr) ?? 0,
+    });
   }
 
   return {
@@ -254,8 +245,58 @@ const getCashFlowTrend = async (
   };
 };
 
+const getAiInsights = async (
+  userId: string,
+  startDate?: string,
+  endDate?: string,
+  language?: string,
+): Promise<AiInsightsData> => {
+  const [summary, expenseCategories, incomeCategories] = await Promise.all([
+    getSummary(userId, startDate, endDate),
+    getCategoryChart(
+      userId,
+      startDate,
+      endDate,
+      TransactionType.EXPENSE,
+      language,
+    ),
+    getCategoryChart(
+      userId,
+      startDate,
+      endDate,
+      TransactionType.INCOME,
+      language,
+    ),
+  ]);
+
+  const periodStr =
+    startDate && endDate ? `${startDate} — ${endDate}` : 'all time';
+
+  const insights = await generateFinancialInsights(
+    {
+      period: periodStr,
+      currencyCode: summary.currencyCode,
+      totalIncome: summary.totalIncome,
+      totalExpense: summary.totalExpense,
+      netChange: summary.netChange,
+      totalTransactions: summary.totalTransactions,
+      incomeCount: summary.incomeCount,
+      expenseCount: summary.expenseCount,
+      topExpenses: expenseCategories.data.slice(0, 5),
+      topIncomes: incomeCategories.data.slice(0, 3),
+    },
+    language ?? 'en',
+  );
+
+  return {
+    insights,
+    generatedAt: new Date().toISOString(),
+  };
+};
+
 export const reportsService = {
   getSummary,
   getCategoryChart,
   getCashFlowTrend,
+  getAiInsights,
 };

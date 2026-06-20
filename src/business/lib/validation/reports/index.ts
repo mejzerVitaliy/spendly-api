@@ -103,10 +103,46 @@ export const getCashFlowTrendChartResponseSchema = createResponseWithDataSchema(
 
 type CashFlowTrendChart = z.infer<typeof cashFlowTrendChartSchema>;
 
+export const getAiInsightsQuerySchema = z.object({
+  startDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'startDate must be in format YYYY-MM-DD',
+    })
+    .optional(),
+  endDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, {
+      message: 'endDate must be in format YYYY-MM-DD',
+    })
+    .optional(),
+  language: z.string().optional(),
+});
+
+const aiInsightItemSchema = z.object({
+  icon: z.string(),
+  title: z.string(),
+  content: z.string(),
+  type: z.enum(['overview', 'pattern', 'recommendation']),
+});
+
+const aiInsightsDataSchema = z.object({
+  insights: z.array(aiInsightItemSchema),
+  generatedAt: z.string(),
+});
+
+export const getAiInsightsResponseSchema =
+  createResponseWithDataSchema(aiInsightsDataSchema);
+
+type AiInsightsQuery = z.infer<typeof getAiInsightsQuerySchema>;
+type AiInsightsData = z.infer<typeof aiInsightsDataSchema>;
+
 export type {
   SummaryQuery,
   CategoryChartQuery,
   ReportsSummary,
   CategoryChart,
   CashFlowTrendChart,
+  AiInsightsQuery,
+  AiInsightsData,
 };

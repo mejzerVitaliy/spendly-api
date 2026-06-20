@@ -12,6 +12,8 @@ import {
   registerResponseSchema,
   upgradeGuestBodySchema,
   upgradeGuestResponseSchema,
+  forgotPasswordBodySchema,
+  resetPasswordBodySchema,
 } from '../../business';
 import { authHandler } from './auth.handler';
 
@@ -120,5 +122,46 @@ export const authRoutes = async (fastify: FastifyInstance) => {
       },
     },
     authHandler.logout,
+  );
+
+  fastify.get(
+    '/reset-password-redirect',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Redirect to mobile app reset password deep link',
+      },
+    },
+    authHandler.resetPasswordRedirect,
+  );
+
+  fastify.post(
+    '/forgot-password',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Send password reset email',
+        body: forgotPasswordBodySchema,
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    authHandler.forgotPassword,
+  );
+
+  fastify.post(
+    '/reset-password',
+    {
+      schema: {
+        tags: ['auth'],
+        summary: 'Reset password with token',
+        body: resetPasswordBodySchema,
+        response: {
+          200: messageResponseSchema,
+        },
+      },
+    },
+    authHandler.resetPassword,
   );
 };

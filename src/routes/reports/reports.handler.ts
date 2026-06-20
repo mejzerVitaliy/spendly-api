@@ -1,5 +1,10 @@
-import { CategoryChartQuery, SummaryQuery } from '@/business/lib';
+import {
+  AiInsightsQuery,
+  CategoryChartQuery,
+  SummaryQuery,
+} from '@/business/lib';
 import { reportsService } from '@/business/services/reports';
+import { usageService } from '@/business/services/usage/usage.service';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -60,8 +65,27 @@ const getCashFlowTrend = async (
   reply.send({ message: 'Cash flow trend fetched successfully', data });
 };
 
+const getAiInsights = async (
+  req: FastifyRequest<{ Querystring: AiInsightsQuery }>,
+  reply: FastifyReply,
+) => {
+  const { userId } = req.user as JwtPayload;
+  const { startDate, endDate, language } = req.query;
+
+  await usageService.checkInsightLimit(userId);
+  const data = await reportsService.getAiInsights(
+    userId,
+    startDate,
+    endDate,
+    language,
+  );
+  await usageService.incrementInsight(userId);
+  reply.send({ message: 'AI insights generated', data });
+};
+
 export const reportsHandler = {
   getSummary,
   getCategoryChart,
   getCashFlowTrend,
+  getAiInsights,
 };

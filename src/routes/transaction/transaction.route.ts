@@ -1,4 +1,5 @@
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { transactionHandler } from './transaction.handler';
 import {
   createTransactionBodySchema,
@@ -182,5 +183,42 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       },
     },
     transactionHandler.remove,
+  );
+
+  fastify.get(
+    '/recurring/due',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Get recurring transactions due for processing',
+      },
+    },
+    transactionHandler.getRecurringDue,
+  );
+
+  fastify.post(
+    '/recurring/:id/process',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Process a due recurring transaction',
+      },
+    },
+    transactionHandler.processRecurring,
+  );
+
+  fastify.get(
+    '/recurring/processed-today',
+    {
+      preHandler: fastify.authenticate,
+      schema: {
+        tags: ['transaction'],
+        summary: 'Count recurring transactions auto-created today',
+        response: { 200: z.object({ data: z.object({ count: z.number() }) }) },
+      },
+    },
+    transactionHandler.getRecurringProcessedToday,
   );
 };

@@ -12,6 +12,7 @@ import { environmentVariables } from './config';
 import { initPrismaProxy, prisma } from './database/prisma/prisma';
 import { configureRoutes } from './routes';
 import { configureJwt, configureMultipart } from './bootstrap';
+import { startRecurringCron } from './business/services/cron/recurring.cron';
 
 async function main() {
   const fastify = Fastify({
@@ -50,6 +51,11 @@ async function main() {
     });
 
     fastify.log.info('Server is started successfully');
+
+    startRecurringCron({
+      info: (msg) => fastify.log.info(msg),
+      error: (msg, err) => fastify.log.error({ err }, msg),
+    });
   } catch (error) {
     fastify.log.error('Failed to start server');
     fastify.log.error(error);

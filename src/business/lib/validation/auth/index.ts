@@ -137,6 +137,19 @@ export const upgradeGuestResponseSchema = createResponseWithDataSchema(
 
 type UpgradeGuestResponse = z.infer<typeof upgradeGuestResponseSchema>;
 
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().email(),
+});
+
+type ForgotPasswordInput = z.infer<typeof forgotPasswordBodySchema>;
+
+export const resetPasswordBodySchema = z.object({
+  token: z.string().min(1),
+  password: passwordSchema,
+});
+
+type ResetPasswordInput = z.infer<typeof resetPasswordBodySchema>;
+
 export {
   RegisterInput,
   RegisterResponse,
@@ -152,4 +165,6 @@ export {
   GuestResponse,
   UpgradeGuestInput,
   UpgradeGuestResponse,
+  ForgotPasswordInput,
+  ResetPasswordInput,
 };
