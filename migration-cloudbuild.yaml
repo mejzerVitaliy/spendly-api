@@ -19,6 +19,16 @@ steps:
       - "docker logs gce-cloudsql-proxy || echo 'No logs found for gce-cloudsql-proxy'"
 
   - name: "node:22"
+    id: "resolve-failed-migrations"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        ln -s /workspace/cloudsql /cloudsql
+        npx prisma migrate resolve --rolled-back 20260620115356_add_ai_usage --schema src/database/prisma/schema.prisma || true
+    secretEnv: ["DATABASE_URL"]
+
+  - name: "node:22"
     id: "run-migrations"
     entrypoint: "bash"
     args:
