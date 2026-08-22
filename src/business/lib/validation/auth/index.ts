@@ -16,6 +16,11 @@ export const baseUserSchema = z.object({
   mainCurrencyCode: z.string().length(3),
   totalBalance: z.number(),
   onboardingCompleted: z.boolean(),
+  // Prisma returns a Date instance here, not a string - transform it at
+  // the response boundary so every handler that returns a user object
+  // (guest/register/login/upgradeGuest/getMe) doesn't need its own
+  // .toISOString() call.
+  createdAt: z.date().transform((d) => d.toISOString()),
 });
 
 const userWithoutPasswordSchema = baseUserSchema;
