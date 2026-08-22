@@ -6,7 +6,8 @@ if (!globalThis.File) {
 }
 
 import Fastify from 'fastify';
-import fastifyCors from 'fastify-cors';
+import fastifyCors from '@fastify/cors';
+import fastifyRateLimit from '@fastify/rate-limit';
 import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
 import { environmentVariables } from './config';
 import { initPrismaProxy, prisma } from './database/prisma/prisma';
@@ -29,8 +30,17 @@ async function main() {
   });
 
   await fastify.register(fastifyCors, {
-    origin: true,
+    origin:
+      environmentVariables.NODE_ENV === 'production'
+        ? environmentVariables.ALLOWED_ORIGINS
+        : true,
     credentials: true,
+  });
+
+  await fastify.register(fastifyRateLimit, {
+    global: true,
+    max: 100,
+    timeWindow: '1 minute',
   });
 
   fastify.setValidatorCompiler(fastifyTypeProviderZod.validatorCompiler);

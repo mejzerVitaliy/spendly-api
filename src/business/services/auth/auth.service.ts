@@ -24,10 +24,6 @@ import { TokenType, UserType } from '@prisma/client';
 import { emailService } from '@/bootstrap/email';
 import { categoryRepository } from '@/database/repositories';
 
-const generateTwoFactorCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
 const createGuest = async (input: GuestInput) => {
   const createdUser = await userRepository.create({
     data: {

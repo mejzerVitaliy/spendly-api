@@ -27,7 +27,7 @@ services:
       - 8.8.4.4 # Google DNS backup
       - 1.1.1.1 # Cloudflare DNS
     ports:
-      - '${PORT}:5000'
+      - '${PORT}:${PORT}'
     depends_on:
       db:
         condition: service_healthy
@@ -37,7 +37,8 @@ services:
       APPLICATION_SECRET: ${APPLICATION_SECRET}
       APPLICATION_URL: ${APPLICATION_URL}
       FRONTEND_URL: ${FRONTEND_URL}
-      DOCS_PASSWORD: ${DOCS_PASSWORD}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS}
+      CRON_SECRET: ${CRON_SECRET}
     volumes:
       - .:/app
     command: npm run dev

@@ -17,6 +17,7 @@ import { parseTransaction, transcribeAudio } from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
+import { computeNextRecurringDate } from '@/business/lib/recurring-date';
 
 const userMutex = new Map<string, Promise<void>>();
 
@@ -137,31 +138,6 @@ const finalizeTransaction = async (
         : (transaction.nextRecurringDate ?? null),
   };
 };
-
-function computeNextRecurringDate(from: Date, period: RecurringPeriod): Date {
-  const d = new Date(from);
-  switch (period) {
-    case 'DAILY':
-      d.setDate(d.getDate() + 1);
-      break;
-    case 'WEEKLY':
-      d.setDate(d.getDate() + 7);
-      break;
-    case 'BIWEEKLY':
-      d.setDate(d.getDate() + 14);
-      break;
-    case 'MONTHLY':
-      d.setMonth(d.getMonth() + 1);
-      break;
-    case 'SEMIANNUAL':
-      d.setMonth(d.getMonth() + 6);
-      break;
-    case 'ANNUAL':
-      d.setFullYear(d.getFullYear() + 1);
-      break;
-  }
-  return d;
-}
 
 const create = async (userId: string, input: CreateTransactionInput) => {
   const nextRecurringDate =

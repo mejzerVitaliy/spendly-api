@@ -52,6 +52,9 @@ export const authRoutes = async (fastify: FastifyInstance) => {
   fastify.post(
     '/register',
     {
+      config: {
+        rateLimit: { max: 5, timeWindow: '10 minutes' },
+      },
       schema: {
         tags: ['auth'],
         summary: 'Register a new user',
@@ -67,6 +70,9 @@ export const authRoutes = async (fastify: FastifyInstance) => {
   fastify.post(
     '/login',
     {
+      config: {
+        rateLimit: { max: 10, timeWindow: '1 minute' },
+      },
       schema: {
         tags: ['auth'],
         summary: 'Login a user',
@@ -138,6 +144,9 @@ export const authRoutes = async (fastify: FastifyInstance) => {
   fastify.post(
     '/forgot-password',
     {
+      config: {
+        rateLimit: { max: 3, timeWindow: '10 minutes' },
+      },
       schema: {
         tags: ['auth'],
         summary: 'Send password reset email',
@@ -153,6 +162,9 @@ export const authRoutes = async (fastify: FastifyInstance) => {
   fastify.post(
     '/reset-password',
     {
+      config: {
+        rateLimit: { max: 5, timeWindow: '10 minutes' },
+      },
       schema: {
         tags: ['auth'],
         summary: 'Reset password with token',

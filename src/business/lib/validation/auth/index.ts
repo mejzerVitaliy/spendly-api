@@ -18,10 +18,6 @@ export const baseUserSchema = z.object({
   onboardingCompleted: z.boolean(),
 });
 
-const userWithPasswordSchema = baseUserSchema.extend({
-  password: passwordSchema,
-});
-
 const userWithoutPasswordSchema = baseUserSchema;
 
 export const registerBodySchema = z.object({
