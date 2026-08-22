@@ -18,6 +18,7 @@ const envSchema = z.object({
   RESEND_API_KEY: z.string().min(1, 'RESEND_API_KEY is required'),
   OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
   CRON_SECRET: z.string().min(1, 'CRON_SECRET is required'),
+  ANALYTICS_ADMIN_SECRET: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

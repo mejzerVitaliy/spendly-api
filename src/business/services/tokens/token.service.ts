@@ -33,15 +33,6 @@ const getByToken = async (token: string) => {
   return foundToken;
 };
 
-const getByUserId = async (userId: string, type: TokenType) => {
-  return tokenRepository.findFirst({
-    where: {
-      userId,
-      type,
-    },
-  });
-};
-
 const removeByToken = async (token: string) => {
   await tokenRepository.delete({
     where: {
@@ -64,5 +55,4 @@ export const tokenService = {
   getByToken,
   removeByToken,
   removeAllByUserId,
-  getByUserId,
 };

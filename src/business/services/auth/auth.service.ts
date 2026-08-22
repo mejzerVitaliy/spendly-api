@@ -25,6 +25,17 @@ import { emailService } from '@/bootstrap/email';
 import { categoryRepository } from '@/database/repositories';
 
 const createGuest = async (input: GuestInput) => {
+  // Validate every favorite category id up front - addUserFavoriteCategory
+  // would otherwise throw on a bad id partway through the loop below and
+  // leave a half-created user behind (account + wallet, but only some of
+  // the requested favorites).
+  for (const categoryId of input.favoriteCategories) {
+    const category = await categoryRepository.findById(categoryId);
+    if (!category) {
+      throw new BadRequestError(`Category not found: ${categoryId}`);
+    }
+  }
+
   const createdUser = await userRepository.create({
     data: {
       type: UserType.GUEST,
@@ -241,23 +252,32 @@ const forgotPassword = async ({ email }: ForgotPasswordInput) => {
   });
 
   if (user && user.email) {
-    await passwordResetTokenRepository.deleteMany({
-      where: { userId: user.id },
-    });
+    const userId = user.id;
+    const userEmail = user.email;
 
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+    // Fire-and-forget: the token/email work only happens when the account
+    // exists, so awaiting it here would make the response noticeably
+    // slower for a real email than a made-up one - a timing side-channel
+    // that defeats the generic "if that email exists..." response message.
+    (async () => {
+      await passwordResetTokenRepository.deleteMany({
+        where: { userId },
+      });
 
-    await passwordResetTokenRepository.create({
-      data: {
-        userId: user.id,
-        token: rawToken,
-        expiresAt,
-      },
-    });
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
-    const resetUrl = `${environmentVariables.APPLICATION_URL}/api/auth/reset-password-redirect?token=${rawToken}`;
-    await emailService.sendResetPasswordEmail(user.email, resetUrl);
+      await passwordResetTokenRepository.create({
+        data: {
+          userId,
+          token: rawToken,
+          expiresAt,
+        },
+      });
+
+      const resetUrl = `${environmentVariables.APPLICATION_URL}/api/auth/reset-password-redirect?token=${rawToken}`;
+      await emailService.sendResetPasswordEmail(userEmail, resetUrl);
+    })().catch(() => {});
   }
 };
 

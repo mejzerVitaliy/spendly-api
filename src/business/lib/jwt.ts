@@ -7,12 +7,8 @@ const REFRESH_TOKEN_EXPIRATION = '30d';
 const signJwtToken = (
   payload: string | object | Buffer,
   options?: SignOptions,
-  expiresIn?: typeof ACCESS_TOKEN_EXPIRATION | typeof REFRESH_TOKEN_EXPIRATION,
 ) => {
-  return jwt.sign(payload, environmentVariables.APPLICATION_SECRET, {
-    expiresIn,
-    ...options,
-  });
+  return jwt.sign(payload, environmentVariables.APPLICATION_SECRET, options);
 };
 
 const verifyJwtToken = (token: string) => {

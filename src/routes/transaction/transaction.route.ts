@@ -12,6 +12,7 @@ import {
   parseTextTransactionResponseSchema,
   parseVoiceTransactionResponseSchema,
   previewTransactionsResponseSchema,
+  updateTransactionBodySchema,
   updateTransactionResponseSchema,
   updateTransferBodySchema,
   updateTransferResponseSchema,
@@ -162,6 +163,7 @@ export const transactionRoutes = async (fastify: FastifyInstance) => {
       schema: {
         tags: ['transaction'],
         summary: 'Update a transaction by id',
+        body: updateTransactionBodySchema,
         response: {
           200: updateTransactionResponseSchema,
         },

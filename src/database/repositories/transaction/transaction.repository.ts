@@ -1,32 +1,39 @@
-import { Prisma, prisma } from '@/database/prisma/prisma';
+import { DbClient, Prisma, prisma } from '@/database/prisma/prisma';
 
 const create = <T extends Prisma.TransactionCreateArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionCreateArgs>,
-) => prisma.transaction.create(args);
+  client: DbClient = prisma,
+) => client.transaction.create(args);
 
 const findMany = <T extends Prisma.TransactionFindManyArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionFindManyArgs>,
-) => prisma.transaction.findMany(args);
+  client: DbClient = prisma,
+) => client.transaction.findMany(args);
 
 const findUnique = <T extends Prisma.TransactionFindUniqueArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionFindUniqueArgs>,
-) => prisma.transaction.findUnique(args);
+  client: DbClient = prisma,
+) => client.transaction.findUnique(args);
 
 const findFirst = <T extends Prisma.TransactionFindFirstArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionFindFirstArgs>,
-) => prisma.transaction.findFirst(args);
+  client: DbClient = prisma,
+) => client.transaction.findFirst(args);
 
 const upsert = <T extends Prisma.TransactionUpsertArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionUpsertArgs>,
-) => prisma.transaction.upsert(args);
+  client: DbClient = prisma,
+) => client.transaction.upsert(args);
 
 const update = <T extends Prisma.TransactionUpdateArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionUpdateArgs>,
-) => prisma.transaction.update(args);
+  client: DbClient = prisma,
+) => client.transaction.update(args);
 
 const deleteOne = <T extends Prisma.TransactionDeleteArgs>(
   args: Prisma.SelectSubset<T, Prisma.TransactionDeleteArgs>,
-) => prisma.transaction.delete(args);
+  client: DbClient = prisma,
+) => client.transaction.delete(args);
 
 export const transactionRepository = {
   create,

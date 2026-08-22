@@ -14,10 +14,4 @@ export const messageResponseSchema = z.object({
 
 type MessageResponse = z.infer<typeof messageResponseSchema>;
 
-export const idParamsSchema = z.object({
-  id: z.string().uuid(),
-});
-
-type IdInput = z.infer<typeof idParamsSchema>;
-
-export type { MessageResponse, IdInput };
+export type { MessageResponse };

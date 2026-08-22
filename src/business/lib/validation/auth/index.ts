@@ -54,29 +54,6 @@ export const loginResponseSchema = createResponseWithDataSchema(
 
 type LoginResponse = z.infer<typeof loginResponseSchema>;
 
-export const loginTwoFactorBodySchema = z.object({
-  email: z.string().email(),
-  code: z.string(),
-});
-
-type LoginTwoFactorInput = z.infer<typeof loginTwoFactorBodySchema>;
-
-export const loginTwoFactorResendBodySchema = z.object({
-  email: z.string().email(),
-});
-
-type LoginTwoFactorResendInput = z.infer<typeof loginTwoFactorResendBodySchema>;
-
-export const loginTwoFactorResponseSchema = createResponseWithDataSchema(
-  z.object({
-    user: userWithoutPasswordSchema,
-    accessToken: z.string(),
-    refreshToken: z.string(),
-  }),
-);
-
-type LoginTwoFactorResponse = z.infer<typeof loginTwoFactorResponseSchema>;
-
 export const getMeResponseSchema = createResponseWithDataSchema(
   userWithoutPasswordSchema,
 );
@@ -151,12 +128,9 @@ export {
   RegisterResponse,
   LoginInput,
   LoginResponse,
-  LoginTwoFactorInput,
-  LoginTwoFactorResponse,
   GetMeResponse,
   RefreshTokenInput,
   RefreshTokenResponse,
-  LoginTwoFactorResendInput,
   GuestInput,
   GuestResponse,
   UpgradeGuestInput,

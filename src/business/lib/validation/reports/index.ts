@@ -40,22 +40,36 @@ export const getReportsSummaryResponseSchema =
 
 type ReportsSummary = z.infer<typeof reportsSummarySchema>;
 
-export const getCategoryChartQuerySchema = z.object({
-  startDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, {
-      message: 'startDate must be in format YYYY-MM-DD',
-    })
-    .optional(),
-  endDate: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, {
-      message: 'endDate must be in format YYYY-MM-DD',
-    })
-    .optional(),
-  type: z.nativeEnum(TransactionType).optional(),
-  language: z.string().optional(),
-});
+const MAX_DATE_RANGE_DAYS = 730; // 2 years - also used by /cash-flow-trend
+
+export const getCategoryChartQuerySchema = z
+  .object({
+    startDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, {
+        message: 'startDate must be in format YYYY-MM-DD',
+      })
+      .optional(),
+    endDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, {
+        message: 'endDate must be in format YYYY-MM-DD',
+      })
+      .optional(),
+    type: z.nativeEnum(TransactionType).optional(),
+    language: z.string().optional(),
+  })
+  .refine(
+    (query) => {
+      if (!query.startDate || !query.endDate) return true;
+      const days =
+        (new Date(query.endDate).getTime() -
+          new Date(query.startDate).getTime()) /
+        (1000 * 60 * 60 * 24);
+      return days >= 0 && days <= MAX_DATE_RANGE_DAYS;
+    },
+    { message: `Date range must not exceed ${MAX_DATE_RANGE_DAYS} days` },
+  );
 
 export const categoryChartItemSchema = z.object({
   value: z.number(),

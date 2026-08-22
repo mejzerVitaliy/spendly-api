@@ -103,13 +103,6 @@ const convertAmount = async (
   return amount * rate;
 };
 
-const getAvailableCurrencies = async (
-  baseCurrency: string = 'usd',
-): Promise<string[]> => {
-  const rates = await getRatesForCurrency(baseCurrency);
-  return Object.keys(rates);
-};
-
 const clearCache = (): void => {
   cache.clear();
 };
@@ -190,7 +183,6 @@ const updateUserFavoriteCurrencies = async (
 export const currencyService = {
   getExchangeRate,
   convertAmount,
-  getAvailableCurrencies,
   clearCache,
   getAllCurrencies,
   getCurrencyByCode,

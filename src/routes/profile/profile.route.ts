@@ -36,6 +36,9 @@ export const profileRoutes = async (fastify: FastifyInstance) => {
     '/change-password',
     {
       preHandler: fastify.authenticate,
+      config: {
+        rateLimit: { max: 5, timeWindow: '10 minutes' },
+      },
       schema: {
         tags: ['profile'],
         summary: 'Change user password',

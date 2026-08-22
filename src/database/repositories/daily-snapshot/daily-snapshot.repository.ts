@@ -1,36 +1,44 @@
-import { Prisma, prisma } from '@/database/prisma/prisma';
+import { DbClient, Prisma, prisma } from '@/database/prisma/prisma';
 
 const create = <T extends Prisma.DailyBalanceSnapshotCreateArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotCreateArgs>,
-) => prisma.dailyBalanceSnapshot.create(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.create(args);
 
 const findMany = <T extends Prisma.DailyBalanceSnapshotFindManyArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotFindManyArgs>,
-) => prisma.dailyBalanceSnapshot.findMany(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.findMany(args);
 
 const findUnique = <T extends Prisma.DailyBalanceSnapshotFindUniqueArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotFindUniqueArgs>,
-) => prisma.dailyBalanceSnapshot.findUnique(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.findUnique(args);
 
 const findFirst = <T extends Prisma.DailyBalanceSnapshotFindFirstArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotFindFirstArgs>,
-) => prisma.dailyBalanceSnapshot.findFirst(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.findFirst(args);
 
 const upsert = <T extends Prisma.DailyBalanceSnapshotUpsertArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotUpsertArgs>,
-) => prisma.dailyBalanceSnapshot.upsert(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.upsert(args);
 
 const update = <T extends Prisma.DailyBalanceSnapshotUpdateArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotUpdateArgs>,
-) => prisma.dailyBalanceSnapshot.update(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.update(args);
 
 const deleteOne = <T extends Prisma.DailyBalanceSnapshotDeleteArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotDeleteArgs>,
-) => prisma.dailyBalanceSnapshot.delete(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.delete(args);
 
 const deleteMany = <T extends Prisma.DailyBalanceSnapshotDeleteManyArgs>(
   args: Prisma.SelectSubset<T, Prisma.DailyBalanceSnapshotDeleteManyArgs>,
-) => prisma.dailyBalanceSnapshot.deleteMany(args);
+  client: DbClient = prisma,
+) => client.dailyBalanceSnapshot.deleteMany(args);
 
 export const dailySnapshotRepository = {
   create,

@@ -13,6 +13,7 @@ import {
   userRepository,
   walletRepository,
 } from '@/database/repositories';
+import { DbClient, prisma } from '@/database/prisma/prisma';
 import { parseTransaction, transcribeAudio } from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
@@ -97,46 +98,55 @@ const finalizeTransaction = async (
 ) => {
   const { walletId, mainCurrencyCode, convertedAmount, input } = prepared;
 
-  const transaction = await transactionRepository.create({
-    data: { userId, ...input, walletId },
+  return prisma.$transaction(async (tx) => {
+    const transaction = await transactionRepository.create(
+      { data: { userId, ...input, walletId } },
+      tx,
+    );
+
+    if (!transaction) {
+      throw NotFoundError('Transaction not created');
+    }
+
+    const user = await userRepository.findUnique({ where: { id: userId } }, tx);
+
+    if (!user) {
+      throw NotFoundError('User not found');
+    }
+
+    const delta =
+      transaction.type === TransactionType.INCOME
+        ? convertedAmount
+        : -convertedAmount;
+
+    await userRepository.update(
+      {
+        where: { id: userId },
+        data: { totalBalance: user.totalBalance + delta },
+      },
+      tx,
+    );
+
+    await snapshotService.createOrUpdateSnapshot(
+      {
+        userId,
+        date: transaction.date,
+        amount: convertedAmount,
+        type: transaction.type,
+        currencyCode: mainCurrencyCode,
+      },
+      tx,
+    );
+
+    return {
+      ...transaction,
+      date: transaction.date.toISOString(),
+      nextRecurringDate:
+        transaction.nextRecurringDate instanceof Date
+          ? transaction.nextRecurringDate.toISOString()
+          : (transaction.nextRecurringDate ?? null),
+    };
   });
-
-  if (!transaction) {
-    throw NotFoundError('Transaction not created');
-  }
-
-  const user = await userRepository.findUnique({ where: { id: userId } });
-
-  if (!user) {
-    throw NotFoundError('User not found');
-  }
-
-  const delta =
-    transaction.type === TransactionType.INCOME
-      ? convertedAmount
-      : -convertedAmount;
-
-  await userRepository.update({
-    where: { id: userId },
-    data: { totalBalance: user.totalBalance + delta },
-  });
-
-  await snapshotService.createOrUpdateSnapshot({
-    userId,
-    date: transaction.date,
-    amount: convertedAmount,
-    type: transaction.type,
-    currencyCode: mainCurrencyCode,
-  });
-
-  return {
-    ...transaction,
-    date: transaction.date.toISOString(),
-    nextRecurringDate:
-      transaction.nextRecurringDate instanceof Date
-        ? transaction.nextRecurringDate.toISOString()
-        : (transaction.nextRecurringDate ?? null),
-  };
 };
 
 const create = async (userId: string, input: CreateTransactionInput) => {
@@ -224,7 +234,7 @@ const getAll = async (params: GetAllTransactionsParams) => {
         user.mainCurrencyCode,
       );
 
-      const resultTransaction = {
+      return {
         ...transaction,
         date: transaction.date.toISOString(),
         nextRecurringDate:
@@ -234,13 +244,6 @@ const getAll = async (params: GetAllTransactionsParams) => {
         convertedAmount: Math.round(convertedAmount),
         mainCurrencyCode: user.mainCurrencyCode,
       };
-
-      console.log(
-        'Transaction with category:',
-        JSON.stringify(resultTransaction, null, 2),
-      );
-
-      return resultTransaction;
     }),
   );
 
@@ -309,112 +312,164 @@ const getById = async (userId: string, id: string) => {
   };
 };
 
-const update = async (id: string, input: UpdateTransactionInput) => {
+const update = async (
+  userId: string,
+  id: string,
+  input: UpdateTransactionInput,
+) => {
   const transaction = await transactionRepository.findUnique({ where: { id } });
 
   if (!transaction) {
     throw NotFoundError('Transaction not found');
   }
 
-  const user = await userRepository.findUnique({
-    where: { id: transaction.userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
+  if (transaction.userId !== userId) {
+    throw NotFoundError('Transaction not found');
   }
 
-  const oldAmountConverted = await currencyService.convertAmount(
-    transaction.amount,
-    transaction.currencyCode,
-    user.mainCurrencyCode,
+  return withUserLock(userId, () =>
+    prisma.$transaction(async (tx) => {
+      const freshTransaction = await transactionRepository.findUnique(
+        { where: { id } },
+        tx,
+      );
+
+      if (!freshTransaction) {
+        throw NotFoundError('Transaction not found');
+      }
+
+      const user = await userRepository.findUnique(
+        { where: { id: userId } },
+        tx,
+      );
+
+      if (!user) {
+        throw NotFoundError('User not found');
+      }
+
+      const oldAmountConverted = await currencyService.convertAmount(
+        freshTransaction.amount,
+        freshTransaction.currencyCode,
+        user.mainCurrencyCode,
+      );
+
+      let newBalance = user.totalBalance;
+
+      if (freshTransaction.type === TransactionType.INCOME) {
+        newBalance -= oldAmountConverted;
+      } else {
+        newBalance += oldAmountConverted;
+      }
+
+      await snapshotService.removeTransactionFromSnapshot(
+        userId,
+        freshTransaction.date,
+        oldAmountConverted,
+        freshTransaction.type,
+        tx,
+      );
+
+      const updatedTransaction = {
+        ...freshTransaction,
+        ...input,
+        date: new Date(input.date || freshTransaction.date),
+      };
+
+      // A caller can only move their own transaction into a wallet they
+      // themselves own - otherwise this would let a user inject amounts
+      // into someone else's wallet balance (calculateWalletBalance sums by
+      // walletId alone).
+      if (updatedTransaction.walletId !== freshTransaction.walletId) {
+        const wallet = await walletRepository.findFirst(
+          {
+            where: {
+              id: updatedTransaction.walletId,
+              userId,
+              isArchived: false,
+            },
+          },
+          tx,
+        );
+        if (!wallet) {
+          throw new BadRequestError('Wallet not found or is archived');
+        }
+      }
+
+      const finalAmountConverted = await currencyService.convertAmount(
+        updatedTransaction.amount,
+        updatedTransaction.currencyCode,
+        user.mainCurrencyCode,
+      );
+
+      if (updatedTransaction.type === TransactionType.INCOME) {
+        newBalance += finalAmountConverted;
+      } else {
+        newBalance -= finalAmountConverted;
+      }
+
+      const nextRecurringDateForUpdate =
+        input.isRecurring && input.recurringPeriod
+          ? computeNextRecurringDate(
+              updatedTransaction.date,
+              input.recurringPeriod as RecurringPeriod,
+            )
+          : null;
+
+      await transactionRepository.update(
+        {
+          where: { id },
+          data: {
+            description: updatedTransaction.description,
+            amount: updatedTransaction.amount,
+            type: updatedTransaction.type,
+            date: updatedTransaction.date,
+            categoryId: updatedTransaction.categoryId,
+            currencyCode: updatedTransaction.currencyCode,
+            walletId: updatedTransaction.walletId,
+            isRecurring: input.isRecurring ?? false,
+            recurringPeriod: input.isRecurring
+              ? (input.recurringPeriod ?? null)
+              : null,
+            nextRecurringDate: nextRecurringDateForUpdate,
+          },
+        },
+        tx,
+      );
+
+      await userRepository.update(
+        {
+          where: { id: userId },
+          data: {
+            totalBalance: newBalance,
+          },
+        },
+        tx,
+      );
+
+      await snapshotService.createOrUpdateSnapshot(
+        {
+          userId,
+          date: updatedTransaction.date,
+          amount: finalAmountConverted,
+          type: updatedTransaction.type,
+          currencyCode: user.mainCurrencyCode,
+        },
+        tx,
+      );
+
+      return {
+        ...updatedTransaction,
+        date: updatedTransaction.date.toISOString(),
+        nextRecurringDate:
+          updatedTransaction.nextRecurringDate instanceof Date
+            ? updatedTransaction.nextRecurringDate.toISOString()
+            : ((updatedTransaction.nextRecurringDate as
+                | string
+                | null
+                | undefined) ?? null),
+      };
+    }),
   );
-
-  let newBalance = user.totalBalance;
-
-  if (transaction.type === TransactionType.INCOME) {
-    newBalance -= oldAmountConverted;
-  } else {
-    newBalance += oldAmountConverted;
-  }
-
-  await snapshotService.removeTransactionFromSnapshot(
-    transaction.userId,
-    transaction.date,
-    oldAmountConverted,
-    transaction.type,
-  );
-
-  const updatedTransaction = {
-    ...transaction,
-    ...input,
-    date: new Date(input.date || transaction.date),
-  };
-
-  const finalAmountConverted = await currencyService.convertAmount(
-    updatedTransaction.amount,
-    updatedTransaction.currencyCode,
-    user.mainCurrencyCode,
-  );
-
-  if (updatedTransaction.type === TransactionType.INCOME) {
-    newBalance += finalAmountConverted;
-  } else {
-    newBalance -= finalAmountConverted;
-  }
-
-  const nextRecurringDateForUpdate =
-    input.isRecurring && input.recurringPeriod
-      ? computeNextRecurringDate(
-          updatedTransaction.date,
-          input.recurringPeriod as RecurringPeriod,
-        )
-      : null;
-
-  await transactionRepository.update({
-    where: { id },
-    data: {
-      description: updatedTransaction.description,
-      amount: updatedTransaction.amount,
-      type: updatedTransaction.type,
-      date: updatedTransaction.date,
-      categoryId: updatedTransaction.categoryId,
-      currencyCode: updatedTransaction.currencyCode,
-      walletId: updatedTransaction.walletId,
-      isRecurring: input.isRecurring ?? false,
-      recurringPeriod: input.isRecurring
-        ? (input.recurringPeriod ?? null)
-        : null,
-      nextRecurringDate: nextRecurringDateForUpdate,
-    },
-  });
-
-  await userRepository.update({
-    where: { id: transaction.userId },
-    data: {
-      totalBalance: newBalance,
-    },
-  });
-
-  await snapshotService.createOrUpdateSnapshot({
-    userId: transaction.userId,
-    date: updatedTransaction.date,
-    amount: finalAmountConverted,
-    type: updatedTransaction.type,
-    currencyCode: user.mainCurrencyCode,
-  });
-
-  return {
-    ...updatedTransaction,
-    date: updatedTransaction.date.toISOString(),
-    nextRecurringDate:
-      updatedTransaction.nextRecurringDate instanceof Date
-        ? updatedTransaction.nextRecurringDate.toISOString()
-        : ((updatedTransaction.nextRecurringDate as
-            | string
-            | null
-            | undefined) ?? null),
-  };
 };
 
 const removeSingle = async (
@@ -427,6 +482,7 @@ const removeSingle = async (
     date: Date;
   },
   user: { id: string; totalBalance: number; mainCurrencyCode: string },
+  tx: DbClient,
 ) => {
   const convertedAmount = await currencyService.convertAmount(
     transaction.amount,
@@ -444,55 +500,69 @@ const removeSingle = async (
     transaction.date,
     convertedAmount,
     transaction.type,
+    tx,
   );
 
-  await transactionRepository.delete({ where: { id: transaction.id } });
+  await transactionRepository.delete({ where: { id: transaction.id } }, tx);
 
   return delta;
 };
 
-const remove = async (id: string) => {
+const remove = async (userId: string, id: string) => {
   const transaction = await transactionRepository.findUnique({ where: { id } });
 
   if (!transaction) {
     throw NotFoundError('Transaction not found');
   }
 
-  const user = await userRepository.findUnique({
-    where: { id: transaction.userId },
-  });
-
-  if (!user) {
-    throw NotFoundError('User not found');
+  if (transaction.userId !== userId) {
+    throw NotFoundError('Transaction not found');
   }
 
-  return withUserLock(transaction.userId, async () => {
-    const freshUser = await userRepository.findUnique({
-      where: { id: transaction.userId },
-    });
-    if (!freshUser) throw NotFoundError('User not found');
+  return withUserLock(userId, () =>
+    prisma.$transaction(async (tx) => {
+      const freshUser = await userRepository.findUnique(
+        { where: { id: userId } },
+        tx,
+      );
+      if (!freshUser) throw NotFoundError('User not found');
 
-    let balanceDelta = await removeSingle(transaction, freshUser);
+      const freshTransaction = await transactionRepository.findUnique(
+        { where: { id } },
+        tx,
+      );
+      if (!freshTransaction) throw NotFoundError('Transaction not found');
 
-    // If this is part of a transfer, also remove the paired transaction
-    if (transaction.transferGroupId) {
-      const paired = await transactionRepository.findFirst({
-        where: {
-          transferGroupId: transaction.transferGroupId,
-          id: { not: id },
-        },
-      });
+      let balanceDelta = await removeSingle(freshTransaction, freshUser, tx);
 
-      if (paired) {
-        balanceDelta += await removeSingle(paired, freshUser);
+      // If this is part of a transfer, also remove the paired transaction
+      if (freshTransaction.transferGroupId) {
+        const paired = await transactionRepository.findFirst(
+          {
+            where: {
+              transferGroupId: freshTransaction.transferGroupId,
+              id: { not: id },
+            },
+          },
+          tx,
+        );
+
+        if (paired) {
+          balanceDelta += await removeSingle(paired, freshUser, tx);
+        }
       }
-    }
 
-    await userRepository.update({
-      where: { id: transaction.userId },
-      data: { totalBalance: freshUser.totalBalance + Math.round(balanceDelta) },
-    });
-  });
+      await userRepository.update(
+        {
+          where: { id: userId },
+          data: {
+            totalBalance: freshUser.totalBalance + Math.round(balanceDelta),
+          },
+        },
+        tx,
+      );
+    }),
+  );
 };
 
 const createTransfer = async (userId: string, input: CreateTransferInput) => {
@@ -546,76 +616,94 @@ const createTransfer = async (userId: string, input: CreateTransferInput) => {
     currencyService.convertAmount(toAmount, toCurrency, user.mainCurrencyCode),
   ]);
 
-  return withUserLock(userId, async () => {
-    const freshUser = await userRepository.findUnique({
-      where: { id: userId },
-    });
-    if (!freshUser) throw NotFoundError('User not found');
+  return withUserLock(userId, () =>
+    prisma.$transaction(async (tx) => {
+      const freshUser = await userRepository.findUnique(
+        { where: { id: userId } },
+        tx,
+      );
+      if (!freshUser) throw NotFoundError('User not found');
 
-    const fromTransaction = await transactionRepository.create({
-      data: {
-        userId,
-        walletId: fromWalletId,
-        amount: fromAmount,
-        currencyCode: fromCurrency,
-        type: TransactionType.EXPENSE,
-        date: transactionDate,
-        description,
-        transferGroupId,
-      },
-    });
+      const fromTransaction = await transactionRepository.create(
+        {
+          data: {
+            userId,
+            walletId: fromWalletId,
+            amount: fromAmount,
+            currencyCode: fromCurrency,
+            type: TransactionType.EXPENSE,
+            date: transactionDate,
+            description,
+            transferGroupId,
+          },
+        },
+        tx,
+      );
 
-    const toTransaction = await transactionRepository.create({
-      data: {
-        userId,
-        walletId: toWalletId,
-        amount: toAmount,
-        currencyCode: toCurrency,
-        type: TransactionType.INCOME,
-        date: transactionDate,
-        description,
-        transferGroupId,
-      },
-    });
+      const toTransaction = await transactionRepository.create(
+        {
+          data: {
+            userId,
+            walletId: toWalletId,
+            amount: toAmount,
+            currencyCode: toCurrency,
+            type: TransactionType.INCOME,
+            date: transactionDate,
+            description,
+            transferGroupId,
+          },
+        },
+        tx,
+      );
 
-    // Net effect on total balance: +toAmountInMain - fromAmountInMain
-    const balanceDelta = Math.round(toAmountInMain - fromAmountInMain);
-    await userRepository.update({
-      where: { id: userId },
-      data: { totalBalance: freshUser.totalBalance + balanceDelta },
-    });
+      // Net effect on total balance: +toAmountInMain - fromAmountInMain
+      const balanceDelta = Math.round(toAmountInMain - fromAmountInMain);
+      await userRepository.update(
+        {
+          where: { id: userId },
+          data: { totalBalance: freshUser.totalBalance + balanceDelta },
+        },
+        tx,
+      );
 
-    await snapshotService.createOrUpdateSnapshot({
-      userId,
-      date: transactionDate,
-      amount: Math.round(fromAmountInMain),
-      type: TransactionType.EXPENSE,
-      currencyCode: user.mainCurrencyCode,
-    });
-    await snapshotService.createOrUpdateSnapshot({
-      userId,
-      date: transactionDate,
-      amount: Math.round(toAmountInMain),
-      type: TransactionType.INCOME,
-      currencyCode: user.mainCurrencyCode,
-    });
+      await snapshotService.createOrUpdateSnapshot(
+        {
+          userId,
+          date: transactionDate,
+          amount: Math.round(fromAmountInMain),
+          type: TransactionType.EXPENSE,
+          currencyCode: user.mainCurrencyCode,
+        },
+        tx,
+      );
+      await snapshotService.createOrUpdateSnapshot(
+        {
+          userId,
+          date: transactionDate,
+          amount: Math.round(toAmountInMain),
+          type: TransactionType.INCOME,
+          currencyCode: user.mainCurrencyCode,
+        },
+        tx,
+      );
 
-    return {
-      fromTransaction: {
-        ...fromTransaction,
-        date: fromTransaction.date.toISOString(),
-      },
-      toTransaction: {
-        ...toTransaction,
-        date: toTransaction.date.toISOString(),
-      },
-      exchangeRate,
-      fromCurrencyCode: fromCurrency,
-      toCurrencyCode: toCurrency,
-      fromAmount,
-      toAmount,
-    };
-  });
+      return {
+        fromTransaction: {
+          ...fromTransaction,
+          date: fromTransaction.date.toISOString(),
+        },
+        toTransaction: {
+          ...toTransaction,
+          date: toTransaction.date.toISOString(),
+        },
+        exchangeRate,
+        fromCurrencyCode: fromCurrency,
+        toCurrencyCode: toCurrency,
+        fromAmount,
+        toAmount,
+      };
+    }),
+  );
 };
 
 const DEFAULT_CATEGORY_NAME = 'Unexpected Expenses';
@@ -879,88 +967,108 @@ const updateTransfer = async (
       ),
     ]);
 
-  return withUserLock(userId, async () => {
-    const freshUser = await userRepository.findUnique({
-      where: { id: userId },
-    });
-    if (!freshUser) throw NotFoundError('User not found');
+  return withUserLock(userId, () =>
+    prisma.$transaction(async (tx) => {
+      const freshUser = await userRepository.findUnique(
+        { where: { id: userId } },
+        tx,
+      );
+      if (!freshUser) throw NotFoundError('User not found');
 
-    await snapshotService.removeTransactionFromSnapshot(
-      userId,
-      expenseTx.date,
-      Math.round(oldFromInMain),
-      TransactionType.EXPENSE,
-    );
-    await snapshotService.removeTransactionFromSnapshot(
-      userId,
-      incomeTx.date,
-      Math.round(oldToInMain),
-      TransactionType.INCOME,
-    );
+      await snapshotService.removeTransactionFromSnapshot(
+        userId,
+        expenseTx.date,
+        Math.round(oldFromInMain),
+        TransactionType.EXPENSE,
+        tx,
+      );
+      await snapshotService.removeTransactionFromSnapshot(
+        userId,
+        incomeTx.date,
+        Math.round(oldToInMain),
+        TransactionType.INCOME,
+        tx,
+      );
 
-    await transactionRepository.update({
-      where: { id: expenseTx.id },
-      data: {
-        walletId: newFromWalletId,
-        currencyCode: fromCurrency,
-        amount: newFromAmount,
-        date: newDate,
-        description: newDescription,
-      },
-    });
-    await transactionRepository.update({
-      where: { id: incomeTx.id },
-      data: {
-        walletId: newToWalletId,
-        currencyCode: toCurrency,
-        amount: newToAmount,
-        date: newDate,
-        description: newDescription,
-      },
-    });
+      await transactionRepository.update(
+        {
+          where: { id: expenseTx.id },
+          data: {
+            walletId: newFromWalletId,
+            currencyCode: fromCurrency,
+            amount: newFromAmount,
+            date: newDate,
+            description: newDescription,
+          },
+        },
+        tx,
+      );
+      await transactionRepository.update(
+        {
+          where: { id: incomeTx.id },
+          data: {
+            walletId: newToWalletId,
+            currencyCode: toCurrency,
+            amount: newToAmount,
+            date: newDate,
+            description: newDescription,
+          },
+        },
+        tx,
+      );
 
-    const balanceDelta = Math.round(
-      newToInMain - newFromInMain - oldToInMain + oldFromInMain,
-    );
-    await userRepository.update({
-      where: { id: userId },
-      data: { totalBalance: freshUser.totalBalance + balanceDelta },
-    });
+      const balanceDelta = Math.round(
+        newToInMain - newFromInMain - oldToInMain + oldFromInMain,
+      );
+      await userRepository.update(
+        {
+          where: { id: userId },
+          data: { totalBalance: freshUser.totalBalance + balanceDelta },
+        },
+        tx,
+      );
 
-    await snapshotService.createOrUpdateSnapshot({
-      userId,
-      date: newDate,
-      amount: Math.round(newFromInMain),
-      type: TransactionType.EXPENSE,
-      currencyCode: user.mainCurrencyCode,
-    });
-    await snapshotService.createOrUpdateSnapshot({
-      userId,
-      date: newDate,
-      amount: Math.round(newToInMain),
-      type: TransactionType.INCOME,
-      currencyCode: user.mainCurrencyCode,
-    });
+      await snapshotService.createOrUpdateSnapshot(
+        {
+          userId,
+          date: newDate,
+          amount: Math.round(newFromInMain),
+          type: TransactionType.EXPENSE,
+          currencyCode: user.mainCurrencyCode,
+        },
+        tx,
+      );
+      await snapshotService.createOrUpdateSnapshot(
+        {
+          userId,
+          date: newDate,
+          amount: Math.round(newToInMain),
+          type: TransactionType.INCOME,
+          currencyCode: user.mainCurrencyCode,
+        },
+        tx,
+      );
 
-    return {
-      fromTransaction: {
-        ...expenseTx,
-        walletId: newFromWalletId,
-        currencyCode: fromCurrency,
-        amount: newFromAmount,
-        date: newDate.toISOString(),
-        description: newDescription ?? null,
-      },
-      toTransaction: {
-        ...incomeTx,
-        walletId: newToWalletId,
-        currencyCode: toCurrency,
-        amount: newToAmount,
-        date: newDate.toISOString(),
-        description: newDescription ?? null,
-      },
-    };
-  });
+      return {
+        fromTransaction: {
+          ...expenseTx,
+          walletId: newFromWalletId,
+          currencyCode: fromCurrency,
+          amount: newFromAmount,
+          date: newDate.toISOString(),
+          description: newDescription ?? null,
+        },
+        toTransaction: {
+          ...incomeTx,
+          walletId: newToWalletId,
+          currencyCode: toCurrency,
+          amount: newToAmount,
+          date: newDate.toISOString(),
+          description: newDescription ?? null,
+        },
+      };
+    }),
+  );
 };
 
 const getRecurringDue = async (userId: string) => {

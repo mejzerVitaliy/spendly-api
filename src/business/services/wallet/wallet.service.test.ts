@@ -6,6 +6,9 @@ vi.mock('@/database/repositories', () => ({
   transactionRepository: { findMany: vi.fn() },
   userRepository: {},
 }));
+vi.mock('@/database/prisma/prisma', () => ({
+  prisma: { $transaction: vi.fn() },
+}));
 vi.mock('../currency/currency.service', () => ({
   currencyService: { convertAmount: vi.fn() },
 }));
@@ -26,11 +29,22 @@ describe('walletService.calculateWalletBalance', () => {
   it('starts from the initial balance when there are no transactions', async () => {
     findMany.mockResolvedValue([]);
     const balance = await walletService.calculateWalletBalance(
+      'user-1',
       'wallet-1',
       4200,
       'USD',
     );
     expect(balance).toBe(4200);
+  });
+
+  it('scopes the transaction lookup to both the wallet and its owner', async () => {
+    findMany.mockResolvedValue([]);
+    await walletService.calculateWalletBalance('user-1', 'wallet-1', 0, 'USD');
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { walletId: 'wallet-1', userId: 'user-1' },
+      }),
+    );
   });
 
   it('adds income and subtracts expenses in the wallet currency', async () => {
@@ -41,6 +55,7 @@ describe('walletService.calculateWalletBalance', () => {
     convertAmount.mockImplementation(async (amount: number) => amount);
 
     const balance = await walletService.calculateWalletBalance(
+      'user-1',
       'wallet-1',
       10000,
       'USD',
@@ -55,6 +70,7 @@ describe('walletService.calculateWalletBalance', () => {
     convertAmount.mockResolvedValue(1080);
 
     const balance = await walletService.calculateWalletBalance(
+      'user-1',
       'wallet-1',
       0,
       'USD',
@@ -70,6 +86,7 @@ describe('walletService.calculateWalletBalance', () => {
     convertAmount.mockResolvedValue(108.6);
 
     const balance = await walletService.calculateWalletBalance(
+      'user-1',
       'wallet-1',
       1000,
       'USD',
@@ -88,6 +105,7 @@ describe('walletService.calculateWalletBalance', () => {
     );
 
     const balance = await walletService.calculateWalletBalance(
+      'user-1',
       'wallet-1',
       0,
       'USD',

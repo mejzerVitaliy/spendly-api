@@ -10,7 +10,7 @@ import fastifyCors from '@fastify/cors';
 import fastifyRateLimit from '@fastify/rate-limit';
 import * as fastifyTypeProviderZod from 'fastify-type-provider-zod';
 import { environmentVariables } from './config';
-import { initPrismaProxy, prisma } from './database/prisma/prisma';
+import { prisma, Prisma } from './database/prisma/prisma';
 import { configureRoutes } from './routes';
 import { configureJwt, configureMultipart } from './bootstrap';
 import { startRecurringCron } from './business/services/cron/recurring.cron';
@@ -46,16 +46,34 @@ async function main() {
   fastify.setValidatorCompiler(fastifyTypeProviderZod.validatorCompiler);
   fastify.setSerializerCompiler(fastifyTypeProviderZod.serializerCompiler);
 
+  // Everything else (our own @fastify/error-based errors, Zod validation
+  // errors, etc.) already carries a correct statusCode and is handled fine
+  // by Fastify's default error handler - only translate the specific raw
+  // Prisma error that otherwise leaks through as an opaque 500.
+  fastify.setErrorHandler((error, _request, reply) => {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    ) {
+      reply.status(404).send({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'Resource not found',
+      });
+      return;
+    }
+
+    reply.send(error);
+  });
+
   await configureJwt(fastify);
   await configureMultipart(fastify);
   await configureRoutes(fastify);
 
   try {
-    await initPrismaProxy();
-
     fastify.log.info('Starting Fastify server...');
 
-    fastify.listen({
+    await fastify.listen({
       port: environmentVariables.PORT,
       host: environmentVariables.HOST,
     });

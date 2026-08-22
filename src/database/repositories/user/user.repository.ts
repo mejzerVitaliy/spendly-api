@@ -1,32 +1,39 @@
-import { Prisma, prisma } from '@/database/prisma/prisma';
+import { DbClient, Prisma, prisma } from '@/database/prisma/prisma';
 
 const create = <T extends Prisma.UserCreateArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserCreateArgs>,
-) => prisma.user.create(args);
+  client: DbClient = prisma,
+) => client.user.create(args);
 
 const findMany = <T extends Prisma.UserFindManyArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserFindManyArgs>,
-) => prisma.user.findMany(args);
+  client: DbClient = prisma,
+) => client.user.findMany(args);
 
 const findUnique = <T extends Prisma.UserFindUniqueArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserFindUniqueArgs>,
-) => prisma.user.findUnique(args);
+  client: DbClient = prisma,
+) => client.user.findUnique(args);
 
 const findFirst = <T extends Prisma.UserFindFirstArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserFindFirstArgs>,
-) => prisma.user.findFirst(args);
+  client: DbClient = prisma,
+) => client.user.findFirst(args);
 
 const upsert = <T extends Prisma.UserUpsertArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserUpsertArgs>,
-) => prisma.user.upsert(args);
+  client: DbClient = prisma,
+) => client.user.upsert(args);
 
 const update = <T extends Prisma.UserUpdateArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserUpdateArgs>,
-) => prisma.user.update(args);
+  client: DbClient = prisma,
+) => client.user.update(args);
 
 const deleteOne = <T extends Prisma.UserDeleteArgs>(
   args: Prisma.SelectSubset<T, Prisma.UserDeleteArgs>,
-) => prisma.user.delete(args);
+  client: DbClient = prisma,
+) => client.user.delete(args);
 
 export const userRepository = {
   create,

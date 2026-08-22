@@ -36,7 +36,7 @@ export type RecurringPeriod = (typeof RECURRING_PERIODS)[number];
 
 export const transactionBaseSchema = z.object({
   id: z.string().uuid(),
-  amount: z.number(),
+  amount: z.number().int().positive(),
   date: z.string().datetime(),
   currencyCode: z.string().length(3),
   description: z.string().optional().nullable(),
@@ -57,7 +57,7 @@ export const transactionBaseSchema = z.object({
 });
 
 export const createTransactionBodySchema = z.object({
-  amount: z.number(),
+  amount: z.number().int().positive(),
   date: z.string().datetime(),
   currencyCode: z.string().length(3),
   description: z.string().optional(),
@@ -105,7 +105,7 @@ export const getTransactionByIdResponseSchema = createResponseWithDataSchema(
   transactionBaseSchema,
 );
 
-const updateTransactionBodySchema = transactionBaseSchema.partial();
+export const updateTransactionBodySchema = transactionBaseSchema.partial();
 
 type UpdateTransactionInput = z.infer<typeof updateTransactionBodySchema>;
 

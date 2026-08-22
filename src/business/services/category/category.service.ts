@@ -1,19 +1,10 @@
-import { BadRequestError, NotFoundError } from '@/business/lib';
+import { BadRequestError } from '@/business/lib';
 import { categoryRepository } from '@/database/repositories';
 
 const getAllCategories = async () => {
   return await categoryRepository.findMany({
     orderBy: { order: 'asc' },
   });
-};
-
-const getCategoryById = async (id: string) => {
-  const category = await categoryRepository.findById(id);
-
-  if (!category) {
-    throw new NotFoundError(`Category not found`);
-  }
-  return category;
 };
 
 const getUserFavoriteCategories = async (userId: string) => {
@@ -80,7 +71,6 @@ const updateUserFavoriteCategories = async (
 
 export const categoryService = {
   getAllCategories,
-  getCategoryById,
   getUserFavoriteCategories,
   addUserFavoriteCategory,
   removeUserFavoriteCategory,

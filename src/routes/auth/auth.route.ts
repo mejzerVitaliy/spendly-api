@@ -21,6 +21,9 @@ export const authRoutes = async (fastify: FastifyInstance) => {
   fastify.post(
     '/guest',
     {
+      config: {
+        rateLimit: { max: 10, timeWindow: '10 minutes' },
+      },
       schema: {
         tags: ['auth'],
         summary: 'Create a guest user with onboarding data',

@@ -90,10 +90,11 @@ const update = async (
   }>,
   reply: FastifyReply,
 ) => {
+  const { userId } = req.user as JwtPayload;
   const { id } = req.params;
   const { body } = req;
 
-  const transaction = await transactionService.update(id, body);
+  const transaction = await transactionService.update(userId, id, body);
 
   const response = {
     message: 'Transaction updated successfully',
@@ -114,7 +115,7 @@ const remove = async (
   const { userId } = req.user as JwtPayload;
   const { id } = req.params;
 
-  await transactionService.remove(id);
+  await transactionService.remove(userId, id);
 
   analyticsService.track('transaction_deleted', userId);
 
@@ -158,6 +159,11 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
 
   if (!data) {
     reply.status(400).send({ message: 'Audio file is required' });
+    return;
+  }
+
+  if (!data.mimetype.startsWith('audio/')) {
+    reply.status(400).send({ message: 'Uploaded file must be an audio file' });
     return;
   }
 
@@ -233,6 +239,11 @@ const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
 
   if (!data) {
     reply.status(400).send({ message: 'Audio file is required' });
+    return;
+  }
+
+  if (!data.mimetype.startsWith('audio/')) {
+    reply.status(400).send({ message: 'Uploaded file must be an audio file' });
     return;
   }
 
