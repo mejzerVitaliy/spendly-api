@@ -8,11 +8,23 @@ const trackEvent = async (
   req: FastifyRequest<{ Body: TrackEventInput }>,
   reply: FastifyReply,
 ) => {
-  // This endpoint is public/unauthenticated, so a caller-supplied userId
-  // can't be trusted - it would let anyone attribute events to any real
-  // user id. Always store null here; server-side callers that do know the
-  // real user go through analyticsService.track() directly instead.
-  await analyticsService.trackEvent({ ...req.body, userId: null });
+  // This endpoint has no required auth (it also carries pre-login events),
+  // so a caller-supplied userId in the body can't be trusted - anyone could
+  // attribute events to any real user id. Only trust a userId that comes
+  // from a cryptographically verified JWT; fall back to null (anonymous
+  // event) if there's no token or it doesn't verify.
+  let authenticatedUserId: string | null = null;
+  try {
+    await req.jwtVerify();
+    authenticatedUserId = (req.user as { userId: string }).userId ?? null;
+  } catch {
+    // No/invalid token - anonymous event, that's expected for this route.
+  }
+
+  await analyticsService.trackEvent({
+    ...req.body,
+    userId: authenticatedUserId,
+  });
   reply.send({ message: 'ok' });
 };
 

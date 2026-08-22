@@ -1,6 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import { analyticsHandler } from './analytics.handler';
-import { trackEventBodySchema } from '@/business/lib/validation/analytics';
+import {
+  trackEventBodySchema,
+  dashboardResponseSchema,
+} from '@/business/lib/validation/analytics';
 import { messageResponseSchema } from '@/business/lib';
 
 export const analyticsRoutes = async (fastify: FastifyInstance) => {
@@ -25,6 +28,11 @@ export const analyticsRoutes = async (fastify: FastifyInstance) => {
     {
       config: {
         rateLimit: { max: 20, timeWindow: '1 minute' },
+      },
+      schema: {
+        tags: ['analytics'],
+        summary: 'Get product analytics dashboard (admin-secret protected)',
+        response: { 200: dashboardResponseSchema },
       },
     },
     analyticsHandler.getDashboard,
