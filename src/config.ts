@@ -9,7 +9,7 @@ const envSchema = z.object({
     .default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   APPLICATION_URL: z.string().min(1, 'APPLICATION_URL is required'),
-  FRONTEND_URL: z.string().min(1, 'FRONTEND_URL is required'),
+  FRONTEND_URL: z.string().optional(),
   ALLOWED_ORIGINS: z.string().optional(),
   APPLICATION_SECRET: z.string().min(1, 'APPLICATION_SECRET is required'),
   CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required'),
@@ -32,7 +32,9 @@ const environmentVariables = {
   ...parsed.data,
   ALLOWED_ORIGINS: parsed.data.ALLOWED_ORIGINS
     ? parsed.data.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim())
-    : [parsed.data.FRONTEND_URL],
+    : parsed.data.FRONTEND_URL
+      ? [parsed.data.FRONTEND_URL]
+      : [],
 };
 
 type EnvironmentVariables = typeof environmentVariables;
