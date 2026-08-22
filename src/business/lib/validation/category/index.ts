@@ -44,7 +44,12 @@ type RemoveUserFavoriteCategoryParams = z.infer<
 >;
 
 export const updateUserFavoriteCategoriesBodySchema = z.object({
-  categoryIds: z.array(z.string().uuid()).max(10),
+  // Sanity cap on payload size only — the real "max 10 favorites" business
+  // rule is enforced in categoryService.updateUserFavoriteCategories, where
+  // it can still allow a user who is already over the limit to shrink back
+  // down (a hard .max(10) here would make that impossible: sending 13 ids
+  // to remove 1 from 14 would be rejected before it ever reaches the check).
+  categoryIds: z.array(z.string().uuid()).max(100),
 });
 
 type UpdateUserFavoriteCategoriesInput = z.infer<

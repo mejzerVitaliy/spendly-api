@@ -53,7 +53,16 @@ const updateUserFavoriteCategories = async (
   categoryIds: string[],
 ) => {
   if (categoryIds.length > 10) {
-    throw new BadRequestError('Maximum 10 favorite categories allowed');
+    // Still allow the request through if it doesn't grow the user's
+    // existing favorites — otherwise someone who ended up over the limit
+    // (e.g. from an older client) could never remove items to get back
+    // under it, since every removal would still be rejected until it
+    // dropped below 10 in a single request.
+    const currentCount =
+      await categoryRepository.countUserFavoriteCategories(userId);
+    if (categoryIds.length > currentCount) {
+      throw new BadRequestError('Maximum 10 favorite categories allowed');
+    }
   }
 
   for (const id of categoryIds) {

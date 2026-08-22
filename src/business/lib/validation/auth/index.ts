@@ -100,7 +100,7 @@ type RefreshTokenResponse = z.infer<typeof refreshTokenResponseSchema>;
 
 export const guestBodySchema = z.object({
   mainCurrencyCode: z.string().length(3),
-  favoriteCategories: z.array(z.string().uuid()).min(1),
+  favoriteCategories: z.array(z.string().uuid()).min(1).max(10),
   walletInitialBalance: z.number().int().optional().default(0),
 });
 
