@@ -14,7 +14,11 @@ import {
   walletRepository,
 } from '@/database/repositories';
 import { DbClient, prisma } from '@/database/prisma/prisma';
-import { parseTransaction, transcribeAudio } from '@/bootstrap/openai';
+import {
+  parseTransaction,
+  transcribeAudio,
+  type CategoryInfo,
+} from '@/bootstrap/openai';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
 import { snapshotService } from '../snapshot/snapshot.service';
@@ -713,15 +717,44 @@ const createTransfer = async (userId: string, input: CreateTransferInput) => {
 
 const DEFAULT_CATEGORY_NAME = 'Unexpected Expenses';
 
+// Categories are global and change only on a deploy/seed, but they are also
+// the bulk of the AI system prompt. Two reasons to hold them in memory:
+// one less query on the path the user is actively waiting on, and - more
+// importantly - a byte-identical list on every request, which is what lets
+// OpenAI reuse the cached prompt prefix. The fixed order matters for the same
+// reason: findMany without orderBy gives no stable ordering in Postgres, and a
+// reshuffled list silently busts the cache.
+const CATEGORY_CACHE_TTL_MS = 5 * 60 * 1000;
+let categoryCache: { at: number; value: CategoryInfo[] } | null = null;
+
+const getPromptCategories = async (): Promise<CategoryInfo[]> => {
+  if (categoryCache && Date.now() - categoryCache.at < CATEGORY_CACHE_TTL_MS) {
+    return categoryCache.value;
+  }
+
+  const categories = await categoryRepository.findMany({
+    select: { id: true, name: true, type: true },
+    orderBy: { id: 'asc' },
+  });
+
+  const value = categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.type as string,
+  }));
+
+  categoryCache = { at: Date.now(), value };
+  return value;
+};
+
 const getParseContext = async (userId: string) => {
   const [user, categories, wallets] = await Promise.all([
     userRepository.findUnique({ where: { id: userId } }),
-    categoryRepository.findMany({
-      select: { id: true, name: true, type: true },
-    }),
+    getPromptCategories(),
     walletRepository.findMany({
       where: { userId, isArchived: false },
       select: { id: true, name: true, currencyCode: true },
+      orderBy: { createdAt: 'asc' },
     }),
   ]);
 
@@ -729,11 +762,7 @@ const getParseContext = async (userId: string) => {
 
   return {
     user,
-    categories: categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-      type: c.type as string,
-    })),
+    categories,
     wallets: wallets.map((w) => ({
       id: w.id,
       name: w.name,

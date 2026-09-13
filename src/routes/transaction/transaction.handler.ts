@@ -139,7 +139,7 @@ const createFromText = async (
 
   await usageService.checkTransactionLimit(userId);
   const transactions = await transactionService.createFromText(userId, text);
-  await usageService.incrementTransaction(userId);
+  usageService.incrementTransactionInBackground(userId);
 
   analyticsService.track('ai_transaction_used', userId, {
     method: 'text',
@@ -178,7 +178,7 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
     audioBuffer,
     filename,
   );
-  await usageService.incrementTransaction(userId);
+  usageService.incrementTransactionInBackground(userId);
 
   analyticsService.track('ai_transaction_used', userId, {
     method: 'voice',
@@ -229,7 +229,7 @@ const previewFromText = async (
 
   await usageService.checkTransactionLimit(userId);
   const result = await transactionService.previewText(userId, text);
-  await usageService.incrementTransaction(userId);
+  usageService.incrementTransactionInBackground(userId);
 
   reply.send({ message: 'Transactions parsed successfully', data: result });
 };
@@ -258,7 +258,7 @@ const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
     audioBuffer,
     filename,
   );
-  await usageService.incrementTransaction(userId);
+  usageService.incrementTransactionInBackground(userId);
 
   reply.send({ message: 'Voice parsed successfully', data: result });
 };

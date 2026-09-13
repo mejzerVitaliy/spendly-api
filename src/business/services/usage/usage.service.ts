@@ -31,6 +31,23 @@ const incrementTransaction = async (userId: string) => {
   });
 };
 
+/**
+ * Fire-and-forget counter bump for the AI paths. The user is sitting on a
+ * spinner while we respond, and the counter does not gate this request - it
+ * was already checked before the model call - so making the response wait on
+ * another DB round-trip buys nothing. A lost increment costs at most one extra
+ * free parse; a slower parse costs every user every time.
+ */
+const incrementTransactionInBackground = (userId: string) => {
+  void incrementTransaction(userId).catch((err) => {
+    console.error(
+      '[usage] failed to increment AI transaction count',
+      { userId },
+      err,
+    );
+  });
+};
+
 const checkInsightLimit = async (userId: string) => {
   const month = getCurrentMonth();
   const usage = await getOrCreate(userId, month);
@@ -71,6 +88,7 @@ const getCurrentUsage = async (userId: string) => {
 export const usageService = {
   checkTransactionLimit,
   incrementTransaction,
+  incrementTransactionInBackground,
   checkInsightLimit,
   incrementInsight,
   getCurrentUsage,
