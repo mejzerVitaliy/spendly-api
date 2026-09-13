@@ -759,6 +759,15 @@ const createFromText = async (
   });
 
   if (!parsed.success || parsed.transactions.length === 0) {
+    // The model itself decided this wasn't a valid transaction (as opposed
+    // to a parse/validation failure, which openai.ts already logs) - this
+    // is otherwise invisible, and was previously the only way to notice a
+    // prompt regression like the model rejecting perfectly valid terse input.
+    console.error('[AI][createFromText] model returned no transaction', {
+      userText: text,
+      isVoice,
+      parsedError: parsed.error,
+    });
     throw new BadRequestError(
       parsed.error ?? 'Failed to parse transaction from text',
     );
@@ -829,6 +838,11 @@ const previewText = async (userId: string, text: string, isVoice = false) => {
   });
 
   if (!parsed.success || parsed.transactions.length === 0) {
+    console.error('[AI][previewText] model returned no transaction', {
+      userText: text,
+      isVoice,
+      parsedError: parsed.error,
+    });
     throw new BadRequestError(parsed.error ?? 'Failed to parse transaction');
   }
 

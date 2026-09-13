@@ -95,7 +95,7 @@ OUTPUT SCHEMA:
 }
 
 TRANSACTION TYPES:
-- EXPENSE: money spent, paid, bought, "потратил", "заплатил"
+- EXPENSE: money spent, paid, bought, "потратил", "заплатил", "купил"
 - INCOME: money received, earned, got, salary, "получил", "заработал"
 - TRANSFER: money moved between user's own wallets ("transfer", "move to", "перевел", "перевод между кошельками")
 
@@ -111,11 +111,21 @@ INCOME/EXPENSE RULES:
 - walletId = match from WALLETS by name (case-insensitive, partial ok), else null
 - categoryId = UUID from CATEGORIES whose semantic meaning matches AND whose type matches the transaction type; else null
 - Category matching is language-agnostic: "продукты"/"еда"→Food, "зарплата"→Salary, "такси"→Transport
+- No category/item mentioned at all ("потратил 66 лей", "spent 20 bucks")? That's still a fully valid transaction - set categoryId: null and description: "". A missing category is never a reason to reject the input.
 
 AMOUNT: always in smallest currency unit (cents). 10.50 USD = 1050. 200 UAH = 20000.
-CURRENCY: explicit mention in input overrides main currency.
-  Spoken: dollars/bucks→USD, euros/евро→EUR, UAH/гривен/грн→UAH, lei/лей→MDL, pounds→GBP
-  If no currency mentioned: use ${mainCurrency}.
+CURRENCY: explicit mention in input overrides main currency. Match by MEANING, not exact
+spelling - the input is casual speech/voice transcription in Russian, Ukrainian, Romanian
+or English, so it will hit every grammatical case, plural, and diminutive of a currency
+word, not just its dictionary form. Recognize all of these as the same currency:
+  - MDL: lei, leu, лей, лея, лею, леев, леи, ley
+  - UAH: hryvnia, гривна, гривны, гривен, гривню, грн, грива, гривень
+  - USD: dollars, bucks, доллар, доллары, долларов, баксы, баксов, $
+  - EUR: euro, евро, €
+  - GBP: pounds, фунты, фунтов, £
+  If a currency word is spoken/written but doesn't exactly match one of these, still infer
+  the closest match by sound/root rather than falling back to MAIN CURRENCY or rejecting -
+  MAIN CURRENCY is only a fallback for when NO currency is mentioned at all: ${mainCurrency}.
 
 DATE: ISO 8601 UTC format. Relative dates calculated from TODAY=${todayDate}.
   "yesterday"→day before today, "2 days ago"→2 days before today.
@@ -126,7 +136,16 @@ MULTIPLE TRANSACTIONS: return a separate object for each financial event. Never 
   "bought food 200 and paid 600 gym" → 2 objects.
   "получил зп 1000 долларов и потратил 100 на налоги" → 2 objects (INCOME 1000 USD + EXPENSE 100 USD).
 
-ERROR: if input has no valid financial transaction, no amount, or is meaningless:
+BIAS TOWARD SUCCESS: any input containing a number and a spend/receive/transfer verb IS a
+valid transaction, no matter how terse, informal, or lacking in detail - "потратил 66 лей",
+"spent 20", "получил 500" are all complete, valid, success:true transactions on their own.
+Only return success:false when there is truly no amount at all, or the text has nothing to
+do with money (greetings, questions, small talk, gibberish). When in doubt between
+success:true with your best-guess field values and success:false, choose success:true -
+a wrong guess the user can edit before confirming is far better than a rejection that makes
+this feature look broken on ordinary phrasing.
+
+ERROR: only for genuinely non-financial input (see BIAS TOWARD SUCCESS above):
   Return: { "success": false, "transactions": [], "error": "<short friendly message in the SAME language as user input>" }
   Error must NOT mention JSON/parsing/AI/schema/technical details.
 SUCCESS: { "success": true, "transactions": [...], "error": null }`;
