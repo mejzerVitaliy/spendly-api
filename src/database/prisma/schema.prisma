@@ -47,6 +47,20 @@ model User {
   mainCurrencyCode   String   @default("USD") @map("main_currency_code") @db.VarChar(3)
   mainCurrency       Currency @relation(fields: [mainCurrencyCode], references: [code])
 
+  // Optional per-type defaults, pre-filled on the create-transaction form -
+  // separate from mainCurrencyCode/favorites, which stay the base currency
+  // and the general favorites list. SetNull rather than Restrict since
+  // these are just a UI convenience: losing the referenced category/currency
+  // should silently clear the preference, never block deleting it.
+  defaultIncomeCategoryId  String?   @map("default_income_category_id") @db.Uuid
+  defaultIncomeCategory    Category? @relation("DefaultIncomeCategory", fields: [defaultIncomeCategoryId], references: [id], onDelete: SetNull)
+
+  defaultExpenseCategoryId String?   @map("default_expense_category_id") @db.Uuid
+  defaultExpenseCategory   Category? @relation("DefaultExpenseCategory", fields: [defaultExpenseCategoryId], references: [id], onDelete: SetNull)
+
+  defaultCurrencyCode      String?   @map("default_currency_code") @db.VarChar(3)
+  defaultCurrency          Currency? @relation("DefaultCurrency", fields: [defaultCurrencyCode], references: [code], onDelete: SetNull)
+
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
@@ -58,8 +72,47 @@ model User {
   wallets              Wallet[]
   passwordResetTokens  PasswordResetToken[]
   aiUsage              AiUsage[]
+  pushTokens             PushToken[]
+  notificationCooldowns  NotificationCooldown[]
+  // Set from the client's current i18n language whenever it registers a
+  // push token (see notifications route) - the server has no active
+  // request to read a language from when the daily dispatch cron runs, so
+  // this is the only way it can localize push text for a given user.
+  language               String?   @db.VarChar(5)
 
   @@map("users")
+}
+
+model PushToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+// Server-side equivalent of the client's per-type notification cooldown map
+// (see notification.service.ts) - lets the daily dispatch job (see
+// notification-dispatch.service.ts) avoid re-sending the same push type
+// more often than its cooldown window allows, without the client having to
+// report anything back.
+model NotificationCooldown {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  type       String
+  lastSentAt DateTime @map("last_sent_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@map("notification_cooldowns")
 }
 
 model Token {
@@ -174,6 +227,7 @@ model Currency {
   dailyBalanceSnapshots DailyBalanceSnapshot[]
   favoritedBy           UserFavoriteCurrency[]
   wallets               Wallet[]
+  defaultForUsers        User[] @relation("DefaultCurrency")
 
   @@map("currencies")
 }
@@ -205,6 +259,8 @@ model Category {
 
   transactions   Transaction[]
   favoritedBy    UserFavoriteCategory[]
+  defaultForIncomeUsers  User[] @relation("DefaultIncomeCategory")
+  defaultForExpenseUsers User[] @relation("DefaultExpenseCategory")
 
   @@map("categories")
 }

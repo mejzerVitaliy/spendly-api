@@ -6,3 +6,4 @@ export * from './currency';
 export * from './category';
 export * from './wallet';
 export * from './analytics';
+export * from './notifications';

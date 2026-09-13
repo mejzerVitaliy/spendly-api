@@ -15,9 +15,14 @@ const getSummary = async (
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate } = req.query;
+  const { startDate, endDate, walletId } = req.query;
 
-  const summary = await reportsService.getSummary(userId, startDate, endDate);
+  const summary = await reportsService.getSummary(
+    userId,
+    startDate,
+    endDate,
+    walletId,
+  );
 
   const response = {
     message: 'Reports summary fetched successfully',
@@ -34,7 +39,7 @@ const getCategoryChart = async (
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate, type, language } = req.query;
+  const { startDate, endDate, type, language, walletId } = req.query;
 
   const data = await reportsService.getCategoryChart(
     userId,
@@ -42,6 +47,7 @@ const getCategoryChart = async (
     endDate,
     type,
     language,
+    walletId,
   );
 
   reply.send({ message: 'Category chart fetched successfully', data });
@@ -54,12 +60,13 @@ const getCashFlowTrend = async (
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate } = req.query;
+  const { startDate, endDate, walletId } = req.query;
 
   const data = await reportsService.getCashFlowTrend(
     userId,
     startDate,
     endDate,
+    walletId,
   );
 
   reply.send({ message: 'Cash flow trend fetched successfully', data });
@@ -70,7 +77,7 @@ const getAiInsights = async (
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate, language } = req.query;
+  const { startDate, endDate, language, walletId } = req.query;
 
   await usageService.checkInsightLimit(userId);
   const data = await reportsService.getAiInsights(
@@ -78,6 +85,7 @@ const getAiInsights = async (
     startDate,
     endDate,
     language,
+    walletId,
   );
   await usageService.incrementInsight(userId);
   reply.send({ message: 'AI insights generated', data });

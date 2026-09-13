@@ -9,6 +9,7 @@ import { walletRoutes } from './wallet';
 import { profileRoutes } from './profile';
 import { analyticsRoutes } from './analytics';
 import { usageRoutes } from './usage/usage.route';
+import { notificationsRoutes } from './notifications/notifications.route';
 import { configureCronRoutes } from './cron/cron.route';
 
 const configureRoutes = async (fastify: FastifyInstance) => {
@@ -50,6 +51,10 @@ const configureRoutes = async (fastify: FastifyInstance) => {
 
   await fastify.register(usageRoutes, {
     prefix: 'api/usage',
+  });
+
+  await fastify.register(notificationsRoutes, {
+    prefix: 'api/notifications',
   });
 
   await fastify.register(configureCronRoutes, {

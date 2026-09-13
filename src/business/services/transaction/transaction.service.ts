@@ -172,10 +172,11 @@ interface GetAllTransactionsParams {
   startDate?: string;
   endDate?: string;
   search?: string;
+  walletId?: string;
 }
 
 const getAll = async (params: GetAllTransactionsParams) => {
-  const { userId, startDate, endDate, search } = params;
+  const { userId, startDate, endDate, search, walletId } = params;
   const user = await userRepository.findUnique({
     where: { id: userId },
   });
@@ -187,6 +188,10 @@ const getAll = async (params: GetAllTransactionsParams) => {
   const whereConditions: any = {
     userId,
   };
+
+  if (walletId) {
+    whereConditions.walletId = walletId;
+  }
 
   if (startDate && endDate) {
     whereConditions.date = {

@@ -3,6 +3,7 @@ import { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { environmentVariables } from '@/config';
 import { transactionService } from '@/business/services/transaction/transaction.service';
+import { notificationDispatchService } from '@/business/services/notifications';
 
 const isValidCronSecret = (token: string | undefined): boolean => {
   if (!token) return false;
@@ -45,6 +46,33 @@ export async function configureCronRoutes(fastify: FastifyInstance) {
       }
 
       const result = await transactionService.processAllRecurringDue();
+      return reply.send({ ok: true, ...result });
+    },
+  );
+
+  fastify.post(
+    '/cron/notifications',
+    {
+      schema: {
+        headers: z.object({
+          authorization: z.string(),
+        }),
+        response: {
+          200: z.object({
+            ok: z.boolean(),
+            usersConsidered: z.number(),
+            pushesSent: z.number(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = request.headers.authorization?.replace('Bearer ', '');
+      if (!isValidCronSecret(token)) {
+        return reply.status(401).send({ message: 'Unauthorized' });
+      }
+
+      const result = await notificationDispatchService.dispatchDue();
       return reply.send({ ok: true, ...result });
     },
   );

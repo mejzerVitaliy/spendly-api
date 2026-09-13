@@ -13,7 +13,6 @@ import { environmentVariables } from './config';
 import { prisma, Prisma } from './database/prisma/prisma';
 import { configureRoutes } from './routes';
 import { configureJwt, configureMultipart } from './bootstrap';
-import { startRecurringCron } from './business/services/cron/recurring.cron';
 
 async function main() {
   const fastify = Fastify({
@@ -41,6 +40,26 @@ async function main() {
     global: true,
     max: 100,
     timeWindow: '1 minute',
+    // Key by the authenticated user when possible instead of raw IP - a
+    // shared/NAT'd IP (mobile carrier, office wifi) can otherwise pool many
+    // users' requests into one bucket and trip the limit under completely
+    // normal usage. The JWT is decoded (not verified) purely to read the
+    // userId claim for keying; auth itself is still fully verified downstream,
+    // so a forged token here just buys its own isolated bucket, not access.
+    keyGenerator: (request) => {
+      const authHeader = request.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        try {
+          const decoded = fastify.jwt.decode<{ userId?: string }>(
+            authHeader.slice(7),
+          );
+          if (decoded?.userId) return `user:${decoded.userId}`;
+        } catch {
+          // malformed token - fall through to IP-based key
+        }
+      }
+      return request.ip;
+    },
   });
 
   fastify.setValidatorCompiler(fastifyTypeProviderZod.validatorCompiler);
@@ -79,11 +98,6 @@ async function main() {
     });
 
     fastify.log.info('Server is started successfully');
-
-    startRecurringCron({
-      info: (msg) => fastify.log.info(msg),
-      error: (msg, err) => fastify.log.error({ err }, msg),
-    });
   } catch (error) {
     fastify.log.error('Failed to start server');
     fastify.log.error(error);

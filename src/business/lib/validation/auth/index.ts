@@ -14,6 +14,9 @@ export const baseUserSchema = z.object({
   avatarUrl: z.string().nullable(),
   isTwoFactorEnabled: z.boolean(),
   mainCurrencyCode: z.string().length(3),
+  defaultIncomeCategoryId: z.string().uuid().nullable(),
+  defaultExpenseCategoryId: z.string().uuid().nullable(),
+  defaultCurrencyCode: z.string().length(3).nullable(),
   totalBalance: z.number(),
   onboardingCompleted: z.boolean(),
   // Prisma returns a Date instance here, not a string - transform it at

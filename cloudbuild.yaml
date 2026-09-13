@@ -36,6 +36,74 @@ steps:
           --set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest,CRON_SECRET=projects/207624620631/secrets/dev-spendly-api-cron_secret:latest \
           --quiet
 
+  # The recurring-transactions job used to run via an in-process node-cron
+  # scheduler, which never fires reliably on Cloud Run - min-instances=0 means
+  # the container is usually asleep at the scheduled time. POST /cron/recurring
+  # already exists and is CRON_SECRET-authenticated for exactly this; this step
+  # makes sure a Cloud Scheduler job is actually calling it (create on first
+  # deploy, update on every deploy after, in case the URL/schedule changes).
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: ScheduleRecurringCron
+    waitFor: ["Deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -e
+        if gcloud scheduler jobs describe spendly-recurring-cron --location=$_DEPLOY_REGION >/dev/null 2>&1; then
+          gcloud scheduler jobs update http spendly-recurring-cron \
+            --location=$_DEPLOY_REGION \
+            --schedule="5 0 * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/recurring" \
+            --http-method=POST \
+            --update-headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        else
+          gcloud scheduler jobs create http spendly-recurring-cron \
+            --location=$_DEPLOY_REGION \
+            --schedule="5 0 * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/recurring" \
+            --http-method=POST \
+            --headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        fi
+    secretEnv: ["CRON_SECRET"]
+
+  # Same pattern as ScheduleRecurringCron above, for the daily re-engagement
+  # push dispatch (streak/inactivity/weekly/monthly - see
+  # notification-dispatch.service.ts). 9:00 UTC is a single fixed time with
+  # no per-user timezone awareness - a deliberate scope cut, not an oversight.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: ScheduleNotificationDispatch
+    waitFor: ["Deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -e
+        if gcloud scheduler jobs describe spendly-notification-dispatch --location=$_DEPLOY_REGION >/dev/null 2>&1; then
+          gcloud scheduler jobs update http spendly-notification-dispatch \
+            --location=$_DEPLOY_REGION \
+            --schedule="0 9 * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/notifications" \
+            --http-method=POST \
+            --update-headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        else
+          gcloud scheduler jobs create http spendly-notification-dispatch \
+            --location=$_DEPLOY_REGION \
+            --schedule="0 9 * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/notifications" \
+            --http-method=POST \
+            --headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        fi
+    secretEnv: ["CRON_SECRET"]
+
   - name: "gcr.io/cloud-builders/docker"
     id: start-cloudsql-proxy
     waitFor: ["Deploy"]
@@ -85,6 +153,8 @@ availableSecrets:
   secretManager:
     - versionName: projects/207624620631/secrets/dev-spendly-db-seed_database_url/versions/latest
       env: DATABASE_URL
+    - versionName: projects/207624620631/secrets/dev-spendly-api-cron_secret/versions/latest
+      env: CRON_SECRET
 
 options:
   substitutionOption: ALLOW_LOOSE

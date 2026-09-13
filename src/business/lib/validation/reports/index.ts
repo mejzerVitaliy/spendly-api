@@ -15,6 +15,7 @@ export const getReportsSummaryQuerySchema = z.object({
       message: 'endDate must be in format YYYY-MM-DD',
     })
     .optional(),
+  walletId: z.string().uuid().optional(),
 });
 
 type SummaryQuery = z.infer<typeof getReportsSummaryQuerySchema>;
@@ -58,6 +59,7 @@ export const getCategoryChartQuerySchema = z
       .optional(),
     type: z.nativeEnum(TransactionType).optional(),
     language: z.string().optional(),
+    walletId: z.string().uuid().optional(),
   })
   .refine(
     (query) => {
@@ -131,6 +133,7 @@ export const getAiInsightsQuerySchema = z.object({
     })
     .optional(),
   language: z.string().optional(),
+  walletId: z.string().uuid().optional(),
 });
 
 const aiInsightItemSchema = z.object({

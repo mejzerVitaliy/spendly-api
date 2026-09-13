@@ -10,8 +10,14 @@ export const profileRoutes = async (fastify: FastifyInstance) => {
       preHandler: fastify.authenticate,
       schema: {
         tags: ['profile'],
-        summary: 'Update user settings (main currency)',
-        body: z.object({ mainCurrencyCode: z.string().length(3) }),
+        summary:
+          'Update user settings (main currency, default category/currency)',
+        body: z.object({
+          mainCurrencyCode: z.string().length(3).optional(),
+          defaultIncomeCategoryId: z.string().uuid().nullable().optional(),
+          defaultExpenseCategoryId: z.string().uuid().nullable().optional(),
+          defaultCurrencyCode: z.string().length(3).nullable().optional(),
+        }),
         response: { 200: messageResponseSchema },
       },
     },

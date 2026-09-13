@@ -9,9 +9,11 @@ import {
   dailySnapshotRepository,
   userRepository,
   transactionRepository,
+  walletRepository,
 } from '@/database/repositories';
 import { TransactionType } from '@prisma/client';
 import { currencyService } from '../currency/currency.service';
+import { walletService } from '../wallet/wallet.service';
 import { generateFinancialInsights } from '@/bootstrap/openai';
 
 const formatDateLabel = (dateStr: string): string => {
@@ -25,16 +27,40 @@ const getSummary = async (
   userId: string,
   startDate?: string,
   endDate?: string,
+  walletId?: string,
 ): Promise<ReportsSummary> => {
   const user = await userRepository.findUnique({ where: { id: userId } });
   if (!user) throw NotFoundError('User not found');
 
   const isAllTime = !startDate && !endDate;
 
-  // Balance is still read from snapshots — transfers are net-zero so snapshot
-  // closing balances are always correct.
-  let totalBalance = user.totalBalance;
-  if (!isAllTime) {
+  let totalBalance: number;
+  if (walletId) {
+    // DailyBalanceSnapshot is a whole-account aggregate, not per-wallet, so
+    // there's no historical snapshot to filter here - use the wallet's live
+    // computed balance instead (always "as of now", not period-bounded,
+    // same as the whole-account isAllTime branch below effectively is).
+    const wallet = await walletRepository.findFirst({
+      where: { id: walletId, userId },
+    });
+    if (!wallet) throw NotFoundError('Wallet not found');
+
+    const walletBalance = await walletService.calculateWalletBalance(
+      userId,
+      walletId,
+      wallet.initialBalance,
+      wallet.currencyCode,
+    );
+    totalBalance = Math.round(
+      await currencyService.convertAmount(
+        walletBalance,
+        wallet.currencyCode,
+        user.mainCurrencyCode,
+      ),
+    );
+  } else if (!isAllTime) {
+    // Balance is read from snapshots — transfers are net-zero so snapshot
+    // closing balances are always correct.
     const snapshots = await dailySnapshotRepository.findMany({
       where: {
         userId,
@@ -59,6 +85,7 @@ const getSummary = async (
       totalBalance = before?.closingBalance ?? 0;
     }
   } else {
+    totalBalance = user.totalBalance;
     const latest = await dailySnapshotRepository.findFirst({
       where: { userId },
       orderBy: { date: 'desc' },
@@ -70,6 +97,7 @@ const getSummary = async (
   const transactions = await transactionRepository.findMany({
     where: {
       userId,
+      walletId,
       transferGroupId: null,
       date: {
         gte: startDate ? new Date(startDate) : undefined,
@@ -121,6 +149,7 @@ const getCategoryChart = async (
   endDate?: string,
   type?: TransactionType,
   language?: string,
+  walletId?: string,
 ): Promise<CategoryChart> => {
   const user = await userRepository.findUnique({ where: { id: userId } });
   if (!user) throw NotFoundError('User not found');
@@ -128,6 +157,7 @@ const getCategoryChart = async (
   const transactions = await transactionRepository.findMany({
     where: {
       userId,
+      walletId,
       type: type || TransactionType.EXPENSE,
       transferGroupId: null,
       categoryId: { not: null },
@@ -183,6 +213,7 @@ const getCashFlowTrend = async (
   userId: string,
   startDate?: string,
   endDate?: string,
+  walletId?: string,
 ): Promise<CashFlowTrendChart> => {
   const user = await userRepository.findUnique({ where: { id: userId } });
   if (!user) throw NotFoundError('User not found');
@@ -193,6 +224,7 @@ const getCashFlowTrend = async (
   const transactions = await transactionRepository.findMany({
     where: {
       userId,
+      walletId,
       transferGroupId: null,
       date: { gte: new Date(startDate), lte: new Date(endDate) },
     },
@@ -250,15 +282,17 @@ const getAiInsights = async (
   startDate?: string,
   endDate?: string,
   language?: string,
+  walletId?: string,
 ): Promise<AiInsightsData> => {
   const [summary, expenseCategories, incomeCategories] = await Promise.all([
-    getSummary(userId, startDate, endDate),
+    getSummary(userId, startDate, endDate, walletId),
     getCategoryChart(
       userId,
       startDate,
       endDate,
       TransactionType.EXPENSE,
       language,
+      walletId,
     ),
     getCategoryChart(
       userId,
@@ -266,6 +300,7 @@ const getAiInsights = async (
       endDate,
       TransactionType.INCOME,
       language,
+      walletId,
     ),
   ]);
 

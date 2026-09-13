@@ -38,18 +38,20 @@ const getAll = async (
       startDate?: string;
       endDate?: string;
       search?: string;
+      walletId?: string;
     };
   }>,
   reply: FastifyReply,
 ) => {
   const { userId } = req.user as JwtPayload;
-  const { startDate, endDate, search } = req.query;
+  const { startDate, endDate, search, walletId } = req.query;
 
   const transactions = await transactionService.getAll({
     userId,
     startDate,
     endDate,
     search,
+    walletId,
   });
 
   const response = {

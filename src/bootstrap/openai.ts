@@ -133,44 +133,132 @@ SUCCESS: { "success": true, "transactions": [...], "error": null }`;
 
 // ─── Parse Transaction ────────────────────────────────────────────────────────
 
-export const parseTransaction = async (
-  payload: ParseTransactionPayload,
-): Promise<ParseTransactionResponse> => {
-  const response = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    temperature: 0,
-    max_tokens: 1024,
-    response_format: { type: 'json_object' },
-    messages: [
-      {
-        role: 'system',
-        content: buildSystemPrompt(
-          payload.mainCurrency,
-          payload.todayDate,
-          payload.categories,
-          payload.wallets,
-          payload.isVoice ?? false,
-        ),
+// Mirrors parseTransactionResponseSchema. OpenAI's strict Structured Outputs
+// mode requires every property listed in `required` and `additionalProperties:
+// false` on every object - optionality is expressed as a `[type, "null"]`
+// union instead of an optional key. Keeping this in sync with the zod schema
+// by hand (rather than generating it) since the shape rarely changes and it
+// keeps the strict-mode constraints explicit.
+const PARSE_TRANSACTION_JSON_SCHEMA = {
+  type: 'object',
+  properties: {
+    success: { type: 'boolean' },
+    transactions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          transactionType: {
+            type: 'string',
+            enum: ['INCOME', 'EXPENSE', 'TRANSFER'],
+          },
+          amount: { type: 'number' },
+          currencyCode: { type: 'string' },
+          categoryId: { type: ['string', 'null'] },
+          walletId: { type: ['string', 'null'] },
+          toWalletId: { type: ['string', 'null'] },
+          description: { type: 'string' },
+          date: { type: 'string' },
+        },
+        required: [
+          'transactionType',
+          'amount',
+          'currencyCode',
+          'categoryId',
+          'walletId',
+          'toWalletId',
+          'description',
+          'date',
+        ],
+        additionalProperties: false,
       },
-      { role: 'user', content: payload.userText },
-    ],
-  });
+    },
+    error: { type: ['string', 'null'] },
+  },
+  required: ['success', 'transactions', 'error'],
+  additionalProperties: false,
+} as const;
+
+const AI_REQUEST_TIMEOUT_MS = 20_000;
+
+const runParseAttempt = async (
+  payload: ParseTransactionPayload,
+): Promise<{ content: string }> => {
+  const response = await openai.chat.completions.create(
+    {
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 1024,
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: 'parse_transaction_response',
+          strict: true,
+          schema: PARSE_TRANSACTION_JSON_SCHEMA,
+        },
+      },
+      messages: [
+        {
+          role: 'system',
+          content: buildSystemPrompt(
+            payload.mainCurrency,
+            payload.todayDate,
+            payload.categories,
+            payload.wallets,
+            payload.isVoice ?? false,
+          ),
+        },
+        { role: 'user', content: payload.userText },
+      ],
+    },
+    { timeout: AI_REQUEST_TIMEOUT_MS },
+  );
 
   const content = response.choices[0]?.message?.content;
   if (!content) {
-    return { success: false, transactions: [], error: 'No response from AI' };
+    throw new Error('No response from AI');
   }
+  return { content };
+};
 
-  try {
-    const raw = JSON.parse(content) as Record<string, unknown>;
-    return parseTransactionResponseSchema.parse(raw);
-  } catch {
-    return {
-      success: false,
-      transactions: [],
-      error: 'Failed to parse AI response',
-    };
+const parseAndValidate = (content: string): ParseTransactionResponse => {
+  const raw = JSON.parse(content) as Record<string, unknown>;
+  return parseTransactionResponseSchema.parse(raw);
+};
+
+export const parseTransaction = async (
+  payload: ParseTransactionPayload,
+): Promise<ParseTransactionResponse> => {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let content: string | undefined;
+    try {
+      content = (await runParseAttempt(payload)).content;
+      return parseAndValidate(content);
+    } catch (err) {
+      // Structured Outputs guarantees schema-conforming JSON, so this should
+      // be rare - but when the model still misfires (or the request itself
+      // fails), log the raw content so the failure is actually diagnosable
+      // instead of silently collapsing into a generic user-facing message.
+      console.error(
+        `[AI][parseTransaction] attempt ${attempt}/2 failed`,
+        { rawContent: content, userText: payload.userText },
+        err,
+      );
+      if (attempt === 2) {
+        return {
+          success: false,
+          transactions: [],
+          error: 'Failed to parse AI response',
+        };
+      }
+    }
   }
+  // Unreachable - the loop always returns or throws above.
+  return {
+    success: false,
+    transactions: [],
+    error: 'Failed to parse AI response',
+  };
 };
 
 // ─── Audio Transcription ──────────────────────────────────────────────────────
@@ -183,12 +271,20 @@ export const transcribeAudio = async (
     type: 'audio/m4a',
   });
 
-  const transcript = await openai.audio.transcriptions.create({
-    model: 'gpt-4o-mini-transcribe',
-    file,
-  });
+  try {
+    const transcript = await openai.audio.transcriptions.create(
+      {
+        model: 'gpt-4o-mini-transcribe',
+        file,
+      },
+      { timeout: 30_000 },
+    );
 
-  return transcript.text;
+    return transcript.text;
+  } catch (err) {
+    console.error('[AI][transcribeAudio] transcription request failed', err);
+    throw err;
+  }
 };
 
 export type { ParsedTransactionItem as ParsedAITransactionItem };
