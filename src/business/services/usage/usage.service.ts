@@ -1,10 +1,16 @@
 import { prisma } from '@/database/prisma/prisma';
 import { LimitReachedError } from '@/business/lib/errors';
+import { analyticsService } from '@/business/services/analytics/analytics.service';
 
 export const AI_LIMITS = {
   transactions: 30,
   insights: 5,
 } as const;
+
+// Fraction of the monthly quota at which we consider a user "approaching"
+// the limit - fired as its own event so the approach can be read as a trend
+// (how many people get close), not just the binary hit-the-wall moment.
+const APPROACHING_THRESHOLD = 0.8;
 
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
@@ -19,7 +25,18 @@ const checkTransactionLimit = async (userId: string) => {
   const month = getCurrentMonth();
   const usage = await getOrCreate(userId, month);
   if (usage.transactionCount >= AI_LIMITS.transactions) {
+    analyticsService.track('ai_limit_reached', userId, {
+      limitType: 'transactions',
+    });
     throw new LimitReachedError('AI transaction limit reached for this month');
+  }
+  if (
+    usage.transactionCount >=
+    AI_LIMITS.transactions * APPROACHING_THRESHOLD
+  ) {
+    analyticsService.track('ai_limit_approaching', userId, {
+      limitType: 'transactions',
+    });
   }
 };
 
@@ -52,7 +69,15 @@ const checkInsightLimit = async (userId: string) => {
   const month = getCurrentMonth();
   const usage = await getOrCreate(userId, month);
   if (usage.insightCount >= AI_LIMITS.insights) {
+    analyticsService.track('ai_limit_reached', userId, {
+      limitType: 'insights',
+    });
     throw new LimitReachedError('AI insight limit reached for this month');
+  }
+  if (usage.insightCount >= AI_LIMITS.insights * APPROACHING_THRESHOLD) {
+    analyticsService.track('ai_limit_approaching', userId, {
+      limitType: 'insights',
+    });
   }
 };
 
