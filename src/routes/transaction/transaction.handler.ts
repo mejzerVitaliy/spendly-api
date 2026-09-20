@@ -8,6 +8,7 @@ import {
 import { transactionService } from '@/business/services/transaction';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
 import { usageService } from '@/business/services/usage/usage.service';
+import { getPlatform } from '@/business/lib';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -22,7 +23,10 @@ const create = async (
 
   const transaction = await transactionService.create(userId, body);
 
-  analyticsService.track('transaction_created', userId, { type: body.type });
+  analyticsService.track('transaction_created', userId, {
+    type: body.type,
+    platform: getPlatform(req),
+  });
 
   const response = {
     message: 'Transaction created successfully',
@@ -119,7 +123,9 @@ const remove = async (
 
   await transactionService.remove(userId, id);
 
-  analyticsService.track('transaction_deleted', userId);
+  analyticsService.track('transaction_deleted', userId, {
+    platform: getPlatform(req),
+  });
 
   const response = {
     message: 'Transaction deleted successfully',
@@ -134,16 +140,18 @@ const createFromText = async (
   }>,
   reply: FastifyReply,
 ) => {
-  const { userId } = req.user as JwtPayload;
+  const { userId, email } = req.user as JwtPayload & { email?: string };
   const { text } = req.body;
+  const platform = getPlatform(req);
 
-  await usageService.checkTransactionLimit(userId);
+  await usageService.checkTransactionLimit(userId, email, platform);
   const transactions = await transactionService.createFromText(userId, text);
   usageService.incrementTransactionInBackground(userId);
 
   analyticsService.track('ai_transaction_used', userId, {
     method: 'text',
     count: transactions.length,
+    platform,
   });
 
   const response = {
@@ -155,7 +163,8 @@ const createFromText = async (
 };
 
 const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
-  const { userId } = req.user as JwtPayload;
+  const { userId, email } = req.user as JwtPayload & { email?: string };
+  const platform = getPlatform(req);
 
   const data = await req.file();
 
@@ -172,7 +181,7 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   const audioBuffer = await data.toBuffer();
   const filename = data.filename || 'audio.m4a';
 
-  await usageService.checkTransactionLimit(userId);
+  await usageService.checkTransactionLimit(userId, email, platform);
   const transactions = await transactionService.createFromVoice(
     userId,
     audioBuffer,
@@ -183,6 +192,7 @@ const createFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   analyticsService.track('ai_transaction_used', userId, {
     method: 'voice',
     count: transactions.length,
+    platform,
   });
 
   reply.send({
@@ -198,7 +208,10 @@ const createTransfer = async (
   const { userId } = req.user as JwtPayload;
   const result = await transactionService.createTransfer(userId, req.body);
 
-  analyticsService.track('transaction_created', userId, { type: 'TRANSFER' });
+  analyticsService.track('transaction_created', userId, {
+    type: 'TRANSFER',
+    platform: getPlatform(req),
+  });
 
   reply.send({ message: 'Transfer created successfully', data: result });
 };
@@ -224,10 +237,10 @@ const previewFromText = async (
   req: FastifyRequest<{ Body: ParseTextTransactionInput }>,
   reply: FastifyReply,
 ) => {
-  const { userId } = req.user as JwtPayload;
+  const { userId, email } = req.user as JwtPayload & { email?: string };
   const { text } = req.body;
 
-  await usageService.checkTransactionLimit(userId);
+  await usageService.checkTransactionLimit(userId, email, getPlatform(req));
   const result = await transactionService.previewText(userId, text);
   usageService.incrementTransactionInBackground(userId);
 
@@ -235,7 +248,7 @@ const previewFromText = async (
 };
 
 const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
-  const { userId } = req.user as JwtPayload;
+  const { userId, email } = req.user as JwtPayload & { email?: string };
 
   const data = await req.file();
 
@@ -252,7 +265,7 @@ const previewFromVoice = async (req: FastifyRequest, reply: FastifyReply) => {
   const audioBuffer = await data.toBuffer();
   const filename = data.filename || 'audio.m4a';
 
-  await usageService.checkTransactionLimit(userId);
+  await usageService.checkTransactionLimit(userId, email, getPlatform(req));
   const result = await transactionService.previewVoice(
     userId,
     audioBuffer,

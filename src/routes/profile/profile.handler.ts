@@ -6,7 +6,7 @@ import { categoryRepository } from '@/database/repositories/category';
 import { currencyService } from '@/business/services/currency';
 import { tokenService } from '@/business/services/tokens/token.service';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
-import { BadRequestError } from '@/business/lib';
+import { BadRequestError, getPlatform } from '@/business/lib';
 import { TokenType, TransactionType } from '@prisma/client';
 
 interface UpdateSettingsBody {
@@ -74,6 +74,7 @@ const updateSettings = async (
   if (mainCurrencyCode !== undefined) {
     analyticsService.track('currency_changed', userId, {
       currency: mainCurrencyCode,
+      platform: getPlatform(req),
     });
   }
 
@@ -100,7 +101,9 @@ const updateEmail = async (
     data: { email },
   });
 
-  analyticsService.track('email_updated', userId);
+  analyticsService.track('email_updated', userId, {
+    platform: getPlatform(req),
+  });
 
   reply.send({ message: 'Email updated successfully' });
 };
@@ -132,7 +135,9 @@ const changePassword = async (
     data: { password: hashed },
   });
 
-  analyticsService.track('password_changed', userId);
+  analyticsService.track('password_changed', userId, {
+    platform: getPlatform(req),
+  });
 
   reply.send({ message: 'Password changed successfully' });
 };
@@ -140,7 +145,9 @@ const changePassword = async (
 const deleteAccount = async (req: FastifyRequest, reply: FastifyReply) => {
   const { userId } = req.user as JwtPayload;
 
-  analyticsService.track('account_deleted', userId);
+  analyticsService.track('account_deleted', userId, {
+    platform: getPlatform(req),
+  });
 
   await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
   await userRepository.delete({ where: { id: userId } });

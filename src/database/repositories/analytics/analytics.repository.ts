@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/database/prisma/prisma';
 
 const create = async (data: {
@@ -16,13 +17,24 @@ const create = async (data: {
   });
 };
 
-const getDashboardData = async () => {
+const getDashboardData = async (platform?: string) => {
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sevenDaysAgo = new Date(todayStart);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
   const thirtyDaysAgo = new Date(todayStart);
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+
+  // Appended after an existing boolean condition (top-level WHERE or a
+  // FILTER (WHERE ...)) to scope a query to one platform. Prisma.empty
+  // renders as nothing, so this is a no-op when no platform filter is
+  // requested - same query as before this feature existed.
+  const platformFilter = platform
+    ? Prisma.sql`AND "properties"->>'platform' = ${platform}`
+    : Prisma.empty;
+  const platformWhere = platform
+    ? { properties: { path: ['platform'], equals: platform } }
+    : {};
 
   const [
     dauResult,
@@ -40,21 +52,23 @@ const getDashboardData = async () => {
     prisma.$queryRaw<{ count: bigint }[]>`
         SELECT COUNT(DISTINCT "user_id") as count
         FROM "analytics_events"
-        WHERE "user_id" IS NOT NULL AND "created_at" >= ${todayStart}
+        WHERE "user_id" IS NOT NULL AND "created_at" >= ${todayStart} ${platformFilter}
       `,
     prisma.$queryRaw<{ count: bigint }[]>`
         SELECT COUNT(DISTINCT "user_id") as count
         FROM "analytics_events"
-        WHERE "user_id" IS NOT NULL AND "created_at" >= ${thirtyDaysAgo}
+        WHERE "user_id" IS NOT NULL AND "created_at" >= ${thirtyDaysAgo} ${platformFilter}
       `,
-    prisma.analyticsEvent.count({ where: { createdAt: { gte: todayStart } } }),
     prisma.analyticsEvent.count({
-      where: { createdAt: { gte: sevenDaysAgo } },
+      where: { createdAt: { gte: todayStart }, ...platformWhere },
+    }),
+    prisma.analyticsEvent.count({
+      where: { createdAt: { gte: sevenDaysAgo }, ...platformWhere },
     }),
     prisma.$queryRaw<{ event: string; count: bigint }[]>`
         SELECT "event", COUNT(*) as count
         FROM "analytics_events"
-        WHERE "created_at" >= ${sevenDaysAgo}
+        WHERE "created_at" >= ${sevenDaysAgo} ${platformFilter}
         GROUP BY "event"
         ORDER BY count DESC
         LIMIT 10
@@ -62,14 +76,14 @@ const getDashboardData = async () => {
     prisma.$queryRaw<{ date: Date; dau: bigint }[]>`
         SELECT DATE("created_at") as date, COUNT(DISTINCT "user_id") as dau
         FROM "analytics_events"
-        WHERE "user_id" IS NOT NULL AND "created_at" >= ${sevenDaysAgo}
+        WHERE "user_id" IS NOT NULL AND "created_at" >= ${sevenDaysAgo} ${platformFilter}
         GROUP BY DATE("created_at")
         ORDER BY date ASC
       `,
     prisma.$queryRaw<{ date: Date; count: bigint }[]>`
         SELECT DATE("created_at") as date, COUNT(*) as count
         FROM "analytics_events"
-        WHERE "created_at" >= ${sevenDaysAgo}
+        WHERE "created_at" >= ${sevenDaysAgo} ${platformFilter}
         GROUP BY DATE("created_at")
         ORDER BY date ASC
       `,
@@ -80,17 +94,21 @@ const getDashboardData = async () => {
     // exact per-user conversion rate).
     prisma.$queryRaw<{ started: bigint; completed: bigint }[]>`
         SELECT
-          COUNT(*) FILTER (WHERE "event" = 'onboarding_started') as started,
-          COUNT(*) FILTER (WHERE "event" IN ('guest_created', 'signup_completed')) as completed
+          COUNT(*) FILTER (WHERE "event" = 'onboarding_started' ${platformFilter}) as started,
+          COUNT(*) FILTER (WHERE "event" IN ('guest_created', 'signup_completed') ${platformFilter}) as completed
         FROM "analytics_events"
         WHERE "created_at" >= ${thirtyDaysAgo}
       `,
-    // % of new accounts that created their first transaction within 24h of signup.
+    // % of new accounts that created their first transaction within 24h of
+    // signup. Platform scopes which signup cohort we're looking at (the
+    // "start" of the funnel) - the first_tx side is intentionally left
+    // unfiltered, since a user's own later activity is still valid evidence
+    // of activation regardless of what device recorded it.
     prisma.$queryRaw<{ total_signups: bigint; activated_day1: bigint }[]>`
         WITH signups AS (
           SELECT "user_id", MIN("created_at") as signup_at
           FROM "analytics_events"
-          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL
+          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL ${platformFilter}
           GROUP BY "user_id"
         ),
         first_tx AS (
@@ -123,7 +141,7 @@ const getDashboardData = async () => {
         WITH signups AS (
           SELECT "user_id", MIN("created_at")::date as signup_date
           FROM "analytics_events"
-          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL
+          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL ${platformFilter}
           GROUP BY "user_id"
         ),
         activity AS (
@@ -145,7 +163,7 @@ const getDashboardData = async () => {
         WITH signups AS (
           SELECT DISTINCT "user_id"
           FROM "analytics_events"
-          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL
+          WHERE "event" IN ('guest_created', 'signup_completed') AND "user_id" IS NOT NULL ${platformFilter}
         )
         SELECT
           COUNT(*) as total_users,

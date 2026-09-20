@@ -5,6 +5,7 @@ import {
 } from '@/business/lib';
 import { reportsService } from '@/business/services/reports';
 import { usageService } from '@/business/services/usage/usage.service';
+import { getPlatform } from '@/business/lib';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { JwtPayload } from 'jsonwebtoken';
 
@@ -76,10 +77,10 @@ const getAiInsights = async (
   req: FastifyRequest<{ Querystring: AiInsightsQuery }>,
   reply: FastifyReply,
 ) => {
-  const { userId } = req.user as JwtPayload;
+  const { userId, email } = req.user as JwtPayload & { email?: string };
   const { startDate, endDate, language, walletId } = req.query;
 
-  await usageService.checkInsightLimit(userId);
+  await usageService.checkInsightLimit(userId, email, getPlatform(req));
   const data = await reportsService.getAiInsights(
     userId,
     startDate,

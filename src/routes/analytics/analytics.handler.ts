@@ -1,6 +1,10 @@
 import { timingSafeEqual } from 'crypto';
-import { TrackEventInput } from '@/business/lib/validation/analytics';
+import {
+  TrackEventInput,
+  DashboardQuery,
+} from '@/business/lib/validation/analytics';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
+import { getPlatform } from '@/business/lib';
 import { environmentVariables } from '@/config';
 import { FastifyReply, FastifyRequest } from 'fastify';
 
@@ -24,6 +28,7 @@ const trackEvent = async (
   await analyticsService.trackEvent({
     ...req.body,
     userId: authenticatedUserId,
+    properties: { ...req.body.properties, platform: getPlatform(req) },
   });
   reply.send({ message: 'ok' });
 };
@@ -46,13 +51,16 @@ const isValidAnalyticsSecret = (provided: unknown): boolean => {
   return timingSafeEqual(providedBuf, expectedBuf);
 };
 
-const getDashboard = async (req: FastifyRequest, reply: FastifyReply) => {
+const getDashboard = async (
+  req: FastifyRequest<{ Querystring: DashboardQuery }>,
+  reply: FastifyReply,
+) => {
   if (!isValidAnalyticsSecret(req.headers['x-analytics-secret'])) {
     reply.status(403).send({ message: 'Forbidden' });
     return;
   }
 
-  const data = await analyticsService.getDashboard();
+  const data = await analyticsService.getDashboard(req.query.platform);
   reply.send({ message: 'ok', data });
 };
 

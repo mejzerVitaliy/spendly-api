@@ -10,6 +10,12 @@ export const trackEventBodySchema = z.object({
 
 export type TrackEventInput = z.infer<typeof trackEventBodySchema>;
 
+export const dashboardQuerySchema = z.object({
+  platform: z.enum(['ios', 'android']).optional(),
+});
+
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;
+
 export const dashboardResponseSchema = createResponseWithDataSchema(
   z.object({
     dau: z.number(),

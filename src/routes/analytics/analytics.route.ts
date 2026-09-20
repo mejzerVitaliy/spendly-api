@@ -3,6 +3,7 @@ import { analyticsHandler } from './analytics.handler';
 import {
   trackEventBodySchema,
   dashboardResponseSchema,
+  dashboardQuerySchema,
 } from '@/business/lib/validation/analytics';
 import { messageResponseSchema } from '@/business/lib';
 
@@ -32,6 +33,7 @@ export const analyticsRoutes = async (fastify: FastifyInstance) => {
       schema: {
         tags: ['analytics'],
         summary: 'Get product analytics dashboard (admin-secret protected)',
+        querystring: dashboardQuerySchema,
         response: { 200: dashboardResponseSchema },
       },
     },

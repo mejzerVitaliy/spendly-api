@@ -12,6 +12,7 @@ import {
 } from '@/business';
 import { authService } from '@/business/services/auth/auth.service';
 import { analyticsService } from '@/business/services/analytics/analytics.service';
+import { getPlatform } from '@/business/lib';
 import { JwtPayload } from 'jsonwebtoken';
 import { tokenService } from '@/business/services/tokens/token.service';
 import { TokenType } from '@prisma/client';
@@ -29,6 +30,7 @@ const guest = async (
 
   analyticsService.track('guest_created', createdUser.id, {
     currency: body.mainCurrencyCode,
+    platform: getPlatform(req),
   });
 
   const response = {
@@ -57,7 +59,9 @@ const upgradeGuest = async (
     body,
   );
 
-  analyticsService.track('account_upgraded', userId);
+  analyticsService.track('account_upgraded', userId, {
+    platform: getPlatform(req),
+  });
 
   const response = {
     message: 'Guest upgraded to registered user successfully',
@@ -82,7 +86,9 @@ const register = async (
   const { createdUser, accessToken, refreshToken } =
     await authService.register(body);
 
-  analyticsService.track('signup_completed', createdUser.id);
+  analyticsService.track('signup_completed', createdUser.id, {
+    platform: getPlatform(req),
+  });
 
   const response = {
     message: 'User is registered successfully',
@@ -106,7 +112,9 @@ const login = async (
 
   const data = await authService.login(body);
 
-  analyticsService.track('login_completed', data.user?.id);
+  analyticsService.track('login_completed', data.user?.id, {
+    platform: getPlatform(request),
+  });
 
   const response = {
     message: 'User is logged in successfully',
@@ -160,7 +168,9 @@ const logout = async (request: FastifyRequest, reply: FastifyReply) => {
 
   await tokenService.removeAllByUserId(userId, TokenType.REFRESH);
 
-  analyticsService.track('logout', userId);
+  analyticsService.track('logout', userId, {
+    platform: getPlatform(request),
+  });
 
   const response = {
     message: 'User is logged out successfully',

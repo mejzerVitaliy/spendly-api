@@ -25,6 +25,11 @@ export const configureJwt = async (fastify: FastifyInstance) => {
       if (!user) {
         throw new UnauthorizedError('User not found. Please login again.');
       }
+
+      // Already fetched above for the existence check - attach email while
+      // we have it so downstream handlers (e.g. the AI-usage allowlist)
+      // don't need a second lookup.
+      request.user = { ...(request.user as object), email: user.email };
     } catch (err) {
       if (err instanceof UnauthorizedError) {
         throw err;

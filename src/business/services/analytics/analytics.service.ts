@@ -11,8 +11,8 @@ const trackEvent = async (input: TrackEventInput) => {
   });
 };
 
-const getDashboard = async () => {
-  return analyticsRepository.getDashboardData();
+const getDashboard = async (platform?: string) => {
+  return analyticsRepository.getDashboardData(platform);
 };
 
 // Fire-and-forget: never throws, never blocks response

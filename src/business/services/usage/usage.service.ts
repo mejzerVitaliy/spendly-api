@@ -12,6 +12,17 @@ export const AI_LIMITS = {
 // (how many people get close), not just the binary hit-the-wall moment.
 const APPROACHING_THRESHOLD = 0.8;
 
+// Founder/partner accounts exempted from the monthly AI quota - requested
+// directly for these two people, not a general feature flag. Lower-cased
+// since email comparisons elsewhere in this app are case-insensitive.
+const UNLIMITED_AI_EMAILS = new Set([
+  'mejzervitalik@gmail.com',
+  'arinaj120@gmail.com',
+]);
+
+const isUnlimited = (email?: string) =>
+  !!email && UNLIMITED_AI_EMAILS.has(email.toLowerCase());
+
 const getCurrentMonth = () => new Date().toISOString().slice(0, 7);
 
 const getOrCreate = (userId: string, month: string) =>
@@ -21,12 +32,19 @@ const getOrCreate = (userId: string, month: string) =>
     update: {},
   });
 
-const checkTransactionLimit = async (userId: string) => {
+const checkTransactionLimit = async (
+  userId: string,
+  email?: string,
+  platform?: string,
+) => {
+  if (isUnlimited(email)) return;
+
   const month = getCurrentMonth();
   const usage = await getOrCreate(userId, month);
   if (usage.transactionCount >= AI_LIMITS.transactions) {
     analyticsService.track('ai_limit_reached', userId, {
       limitType: 'transactions',
+      platform,
     });
     throw new LimitReachedError('AI transaction limit reached for this month');
   }
@@ -36,6 +54,7 @@ const checkTransactionLimit = async (userId: string) => {
   ) {
     analyticsService.track('ai_limit_approaching', userId, {
       limitType: 'transactions',
+      platform,
     });
   }
 };
@@ -65,18 +84,26 @@ const incrementTransactionInBackground = (userId: string) => {
   });
 };
 
-const checkInsightLimit = async (userId: string) => {
+const checkInsightLimit = async (
+  userId: string,
+  email?: string,
+  platform?: string,
+) => {
+  if (isUnlimited(email)) return;
+
   const month = getCurrentMonth();
   const usage = await getOrCreate(userId, month);
   if (usage.insightCount >= AI_LIMITS.insights) {
     analyticsService.track('ai_limit_reached', userId, {
       limitType: 'insights',
+      platform,
     });
     throw new LimitReachedError('AI insight limit reached for this month');
   }
   if (usage.insightCount >= AI_LIMITS.insights * APPROACHING_THRESHOLD) {
     analyticsService.track('ai_limit_approaching', userId, {
       limitType: 'insights',
+      platform,
     });
   }
 };
