@@ -66,16 +66,24 @@ export interface WalletInfo {
   id: string;
   name: string;
   currencyCode: string;
+  isDefault?: boolean;
 }
 
 export interface CategoryInfo {
   id: string;
   name: string;
   type: string;
+  isDefault?: boolean;
 }
 
 export interface ParseTransactionPayload {
   mainCurrency: string;
+  // The user's preferred currency for new entries, pre-filled on the manual
+  // form - distinct from mainCurrency (the account's overall reporting
+  // currency). They're often the same but not always: someone can report in
+  // USD while day-to-day spending is in MDL. Falls back to mainCurrency in
+  // the prompt when unset (guest accounts, or a user who never picked one).
+  defaultCurrency?: string;
   todayDate: string;
   categories: CategoryInfo[];
   wallets: WalletInfo[];
@@ -119,9 +127,12 @@ TYPES:
 RULES:
 - category: pick the index whose meaning matches AND whose type matches the
   transaction type. Language-agnostic: "продукты"/"еда"→Food, "зп"→Salary,
-  "такси"→Transport. No match, or nothing stated → null. TRANSFER → always null.
-- wallet/toWallet: match a wallet by name (case-insensitive, partial ok), else null.
-  For non-TRANSFER, toWallet is always null.
+  "такси"→Transport. Nothing stated, or no real match → use whichever index
+  for that type is marked ":default" below, if any; otherwise null.
+  TRANSFER → always null.
+- wallet/toWallet: match a wallet by name (case-insensitive, partial ok).
+  Nothing stated, or no match → use the index marked ":default" below, if
+  any; otherwise null. For non-TRANSFER, toWallet is always null.
 - amount: always cents. TRANSFER amount is in the source wallet's currency.
 - MULTIPLE EVENTS → one object each, never merged: "купил еду 200 и заплатил 600 за зал" → 2.
 
@@ -132,19 +143,22 @@ case, plural and diminutive, not the dictionary form:
 - UAH: hryvnia, гривна, гривны, гривен, гривню, грн
 - USD: dollars, bucks, доллар, долларов, баксы, баксов, $
 - EUR: euro, евро, €    GBP: pounds, фунты, фунтов, £
-Unrecognized currency word → infer the closest by sound/root. Only fall back to
-the user's main currency when NO currency is mentioned at all.
+Unrecognized currency word → infer the closest by sound/root. Nothing stated
+at all → use DEFAULT CURRENCY given below (not MAIN CURRENCY - they can differ).
 
 DATE: relative to TODAY given below. "вчера"/"yesterday" → previous day,
 "2 дня назад" → two days before. Nothing stated → today.
 
 BIAS TOWARD SUCCESS: a number plus a spend/receive/transfer verb IS a valid
 transaction, however terse - "потратил 66 лей", "spent 20", "получил 500" are all
-complete on their own. A missing category or description is NEVER a reason to
-reject. Return success:false only when there is no amount at all, or the text has
-nothing to do with money (greetings, questions, gibberish). When torn, choose
-success:true with your best guess - the user reviews and edits before it's saved,
-so a wrong guess costs one tap while a rejection makes the feature look broken.
+complete on their own. This is exactly what the ":default" category/wallet and
+DEFAULT CURRENCY below are for - a bare "потратил 20" has everything it needs:
+amount from the text, everything else from the user's defaults. A missing
+category, wallet or currency in the input is NEVER a reason to reject. Return
+success:false only when there is no amount at all, or the text has nothing to
+do with money (greetings, questions, gibberish). When torn, choose success:true
+with your best guess - the user reviews and edits before it's saved, so a wrong
+guess costs one tap while a rejection makes the feature look broken.
 
 ERROR (non-financial input only): {"success":false,"transactions":[],"error":"<short,
 friendly, in the user's own language, never mentioning JSON/AI/parsing>"}`;
@@ -155,6 +169,7 @@ stuttered/repeated words. Numbers may be spelled out - convert them.`;
 
 const buildSystemPrompt = (
   mainCurrency: string,
+  defaultCurrency: string | undefined,
   todayDate: string,
   categories: CategoryInfo[],
   wallets: WalletInfo[],
@@ -163,13 +178,14 @@ const buildSystemPrompt = (
   `${STATIC_RULES}${isVoice ? VOICE_NOTE : ''}
 
 CATEGORIES (index:name:type):
-${categories.map((c, i) => `${i}:${c.name}:${c.type === 'INCOME' ? 'IN' : 'EX'}`).join('\n')}
+${categories.map((c, i) => `${i}:${c.name}:${c.type === 'INCOME' ? 'IN' : 'EX'}${c.isDefault ? ':default' : ''}`).join('\n')}
 
 WALLETS (index:name:currency):
-${wallets.length > 0 ? wallets.map((w, i) => `${i}:${w.name}:${w.currencyCode}`).join('\n') : '(none)'}
+${wallets.length > 0 ? wallets.map((w, i) => `${i}:${w.name}:${w.currencyCode}${w.isDefault ? ':default' : ''}`).join('\n') : '(none)'}
 
 TODAY: ${todayDate}
-MAIN CURRENCY: ${mainCurrency}`;
+MAIN CURRENCY: ${mainCurrency}
+DEFAULT CURRENCY: ${defaultCurrency ?? mainCurrency}`;
 
 // ─── Parse Transaction ────────────────────────────────────────────────────────
 
@@ -290,6 +306,7 @@ const runParseAttempt = async (
           role: 'system',
           content: buildSystemPrompt(
             payload.mainCurrency,
+            payload.defaultCurrency,
             payload.todayDate,
             payload.categories,
             payload.wallets,

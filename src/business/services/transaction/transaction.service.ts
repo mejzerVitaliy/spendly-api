@@ -717,6 +717,31 @@ const createTransfer = async (userId: string, input: CreateTransferInput) => {
 
 const DEFAULT_CATEGORY_NAME = 'Unexpected Expenses';
 
+/**
+ * The model is now told about the user's default category (see
+ * buildSystemPrompt/":default" marking) and asked to use it for terse input,
+ * but Structured Outputs still permits it to return null - this is the
+ * server-side backstop. Prefers the user's own per-type default over the
+ * generic global fallback, so "потратил 20" with a default expense category
+ * of "Food" lands in Food, not a wallet-wide "Unexpected Expenses" bucket.
+ */
+const resolveFallbackCategoryId = (
+  transactionType: 'INCOME' | 'EXPENSE' | 'TRANSFER',
+  user: {
+    defaultIncomeCategoryId?: string | null;
+    defaultExpenseCategoryId?: string | null;
+  },
+  globalFallbackId: string,
+): string => {
+  if (transactionType === 'INCOME' && user.defaultIncomeCategoryId) {
+    return user.defaultIncomeCategoryId;
+  }
+  if (transactionType === 'EXPENSE' && user.defaultExpenseCategoryId) {
+    return user.defaultExpenseCategoryId;
+  }
+  return globalFallbackId;
+};
+
 // Categories are global and change only on a deploy/seed, but they are also
 // the bulk of the AI system prompt. Two reasons to hold them in memory:
 // one less query on the path the user is actively waiting on, and - more
@@ -753,20 +778,31 @@ const getParseContext = async (userId: string) => {
     getPromptCategories(),
     walletRepository.findMany({
       where: { userId, isArchived: false },
-      select: { id: true, name: true, currencyCode: true },
+      select: { id: true, name: true, currencyCode: true, isDefault: true },
       orderBy: { createdAt: 'asc' },
     }),
   ]);
 
   if (!user) throw NotFoundError('User not found');
 
+  // getPromptCategories() is a shared, cross-user cache (see above), so the
+  // per-user default marking happens here, fresh per request, rather than
+  // being baked into the cached list itself.
+  const categoriesWithDefaults: CategoryInfo[] = categories.map((c) => ({
+    ...c,
+    isDefault:
+      (c.type === 'INCOME' && c.id === user.defaultIncomeCategoryId) ||
+      (c.type === 'EXPENSE' && c.id === user.defaultExpenseCategoryId),
+  }));
+
   return {
     user,
-    categories,
+    categories: categoriesWithDefaults,
     wallets: wallets.map((w) => ({
       id: w.id,
       name: w.name,
       currencyCode: w.currencyCode,
+      isDefault: w.isDefault,
     })),
   };
 };
@@ -780,6 +816,7 @@ const createFromText = async (
 
   const parsed = await parseTransaction({
     mainCurrency: user.mainCurrencyCode,
+    defaultCurrency: user.defaultCurrencyCode ?? undefined,
     todayDate: new Date().toISOString().split('T')[0],
     categories,
     wallets,
@@ -829,7 +866,13 @@ const createFromText = async (
           amount: tx.amount,
           currencyCode: tx.currencyCode,
           type: tx.transactionType as TransactionType,
-          categoryId: tx.categoryId ?? fallbackCategory.id,
+          categoryId:
+            tx.categoryId ??
+            resolveFallbackCategoryId(
+              tx.transactionType,
+              user,
+              fallbackCategory.id,
+            ),
           walletId: tx.walletId ?? undefined,
           description: tx.description || undefined,
           date: new Date(tx.date).toISOString(),
@@ -859,6 +902,7 @@ const previewText = async (userId: string, text: string, isVoice = false) => {
 
   const parsed = await parseTransaction({
     mainCurrency: user.mainCurrencyCode,
+    defaultCurrency: user.defaultCurrencyCode ?? undefined,
     todayDate: new Date().toISOString().split('T')[0],
     categories,
     wallets,
@@ -883,7 +927,14 @@ const previewText = async (userId: string, text: string, isVoice = false) => {
     ...tx,
     categoryId:
       tx.transactionType !== 'TRANSFER'
-        ? (tx.categoryId ?? fallbackCategory?.id ?? null)
+        ? (tx.categoryId ??
+          (fallbackCategory
+            ? resolveFallbackCategoryId(
+                tx.transactionType,
+                user,
+                fallbackCategory.id,
+              )
+            : null))
         : null,
   }));
 
