@@ -76,4 +76,31 @@ export async function configureCronRoutes(fastify: FastifyInstance) {
       return reply.send({ ok: true, ...result });
     },
   );
+
+  fastify.post(
+    '/cron/reminders',
+    {
+      schema: {
+        headers: z.object({
+          authorization: z.string(),
+        }),
+        response: {
+          200: z.object({
+            ok: z.boolean(),
+            usersConsidered: z.number(),
+            pushesSent: z.number(),
+          }),
+        },
+      },
+    },
+    async (request, reply) => {
+      const token = request.headers.authorization?.replace('Bearer ', '');
+      if (!isValidCronSecret(token)) {
+        return reply.status(401).send({ message: 'Unauthorized' });
+      }
+
+      const result = await notificationDispatchService.dispatchDueReminders();
+      return reply.send({ ok: true, ...result });
+    },
+  );
 }

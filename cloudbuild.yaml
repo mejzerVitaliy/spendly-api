@@ -115,6 +115,45 @@ steps:
         fi
     secretEnv: ["CRON_SECRET"]
 
+  # Per-user "remind me to log a transaction" schedule (see
+  # dispatchDueReminders in notification-dispatch.service.ts) - replaces
+  # the old client-only, app-open-triggered local reminder, which silently
+  # stopped firing at all once a user went a while without reopening the
+  # app. A user-chosen time of day needs much finer granularity than the
+  # once-daily job above, so this runs every 5 minutes; dispatchDueReminders
+  # is a plain "has this user's time of day passed yet today" comparison
+  # with its own 20h cooldown, so a run landing a few minutes late (or one
+  # run failing outright) still self-heals on the next pass instead of
+  # missing the day entirely.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: ScheduleReminderDispatch
+    waitFor: ["Deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -e
+        if gcloud scheduler jobs describe spendly-reminder-dispatch --location=$_DEPLOY_REGION >/dev/null 2>&1; then
+          gcloud scheduler jobs update http spendly-reminder-dispatch \
+            --location=$_DEPLOY_REGION \
+            --schedule="*/5 * * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/reminders" \
+            --http-method=POST \
+            --update-headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        else
+          gcloud scheduler jobs create http spendly-reminder-dispatch \
+            --location=$_DEPLOY_REGION \
+            --schedule="*/5 * * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/cron/reminders" \
+            --http-method=POST \
+            --headers="Authorization=Bearer $$CRON_SECRET" \
+            --quiet
+        fi
+    secretEnv: ["CRON_SECRET"]
+
   # Keep-warm ping, see the comment on min-instances in Deploy above. /ping
   # is unauthenticated and does no DB/work, so no CRON_SECRET needed here.
   # Every 4 minutes comfortably beats Cloud Run's (undocumented, observed

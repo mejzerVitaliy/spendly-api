@@ -74,11 +74,26 @@ model User {
   aiUsage              AiUsage[]
   pushTokens             PushToken[]
   notificationCooldowns  NotificationCooldown[]
+  notificationLogs       NotificationLog[]
   // Set from the client's current i18n language whenever it registers a
   // push token (see notifications route) - the server has no active
   // request to read a language from when the daily dispatch cron runs, so
   // this is the only way it can localize push text for a given user.
   language               String?   @db.VarChar(5)
+
+  // User-configurable "remind me to log a transaction" push (see
+  // notification-dispatch.service.ts dispatchDueReminders). Replaces the
+  // old client-only, app-open-triggered local schedule, which only ever
+  // re-armed itself when the user happened to reopen the app - meaning it
+  // silently stopped firing at all for anyone who went quiet, exactly when
+  // a reminder would matter most. hour/minute are already converted to UTC
+  // on the client at save time from whatever local time the user picked -
+  // no IANA timezone kept, so a DST shift can drift it by up to an hour
+  // until next saved, same scope cut as the rest of this file's "no
+  // per-user timezone awareness".
+  reminderEnabled    Boolean @default(false) @map("reminder_enabled")
+  reminderHourUtc    Int?    @map("reminder_hour_utc")
+  reminderMinuteUtc  Int?    @map("reminder_minute_utc")
 
   @@map("users")
 }
@@ -113,6 +128,29 @@ model NotificationCooldown {
   @@unique([userId, type])
   @@index([userId])
   @@map("notification_cooldowns")
+}
+
+// Durable record of every push actually dispatched server-side (reminder/
+// streak/inactivity/weekly_summary/monthly_recap - the types in
+// notification-dispatch.service.ts, not the purely client-computed ones
+// like spending_trend/guest_data_risk). Lets the client backfill its
+// in-app notification list on next open for anything that arrived while
+// the app was fully closed - Notifications.addNotificationReceivedListener
+// never fires in that case, which is why a push could show as a system
+// banner but never appear in-app.
+model NotificationLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  type       String
+  titleKey   String   @map("title_key")
+  bodyKey    String   @map("body_key")
+  bodyParams Json?    @map("body_params")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notification_logs")
 }
 
 model Token {

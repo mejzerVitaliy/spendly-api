@@ -14,6 +14,7 @@ vi.mock('@/database/repositories', () => ({
   userRepository: {},
   pushTokenRepository: {},
   notificationCooldownRepository: {},
+  notificationLogRepository: {},
 }));
 
 import { notificationDispatchService } from './notification-dispatch.service';
@@ -104,5 +105,56 @@ describe('notificationDispatchService.getStreakAndLastTxDate', () => {
     const result =
       await notificationDispatchService.getStreakAndLastTxDate('user-1');
     expect(result.currentStreak).toBe(2);
+  });
+});
+
+describe('notificationDispatchService.isReminderTimeReached', () => {
+  const at = (iso: string) => new Date(iso);
+
+  it('is false before the user-chosen time of day', () => {
+    expect(
+      notificationDispatchService.isReminderTimeReached(
+        20,
+        0,
+        at('2026-09-16T19:59:00.000Z'),
+      ),
+    ).toBe(false);
+  });
+
+  it('is true exactly at the user-chosen time of day', () => {
+    expect(
+      notificationDispatchService.isReminderTimeReached(
+        20,
+        0,
+        at('2026-09-16T20:00:00.000Z'),
+      ),
+    ).toBe(true);
+  });
+
+  it('stays true any time after the chosen time, same day - a late or missed run self-heals on the next pass', () => {
+    expect(
+      notificationDispatchService.isReminderTimeReached(
+        20,
+        0,
+        at('2026-09-16T23:30:00.000Z'),
+      ),
+    ).toBe(true);
+  });
+
+  it('compares minute-of-day, not just the hour', () => {
+    expect(
+      notificationDispatchService.isReminderTimeReached(
+        9,
+        30,
+        at('2026-09-16T09:15:00.000Z'),
+      ),
+    ).toBe(false);
+    expect(
+      notificationDispatchService.isReminderTimeReached(
+        9,
+        30,
+        at('2026-09-16T09:30:00.000Z'),
+      ),
+    ).toBe(true);
   });
 });

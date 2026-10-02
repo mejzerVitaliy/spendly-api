@@ -8,3 +8,4 @@ export * from './analytics';
 export * from './password-reset-token';
 export * from './push-token';
 export * from './notification-cooldown';
+export * from './notification-log';
