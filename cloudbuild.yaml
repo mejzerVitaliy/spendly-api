@@ -18,12 +18,17 @@ steps:
       - >-
         $_AR_DOCKER_IMAGE_URI:latest
 
-  # min-instances=1 keeps one container warm. With 0, every first request after
-  # an idle gap paid a full Node + Prisma cold start (several seconds) before
-  # any work began - which is most of what made AI transaction creation feel
-  # slow and unreliable. The trade is one always-on instance (~$10-15/month at
-  # this size); if that ever needs to go, the alternative is a Scheduler ping
-  # every few minutes, which is cheaper but only warms the instance it hits.
+  # min-instances=1 (always-on, 24/7-billed CPU+memory reservation) traded
+  # cold starts for a real, continuous cost - it was the single biggest line
+  # item on the Cloud Run bill. Back to 0 here; ScheduleKeepWarm below pings
+  # /ping every 4 minutes instead, which keeps the container warm for real
+  # traffic almost all of the time at a tiny fraction of the cost (a few
+  # hundred trivial requests/day, well inside Cloud Run's free tier) rather
+  # than paying for a guaranteed 24/7 reservation. Not a 100% guarantee the
+  # way min-instances was - a request can still land during the rare window
+  # right after Cloud Run recycles an instance - but it covers the vast
+  # majority of real traffic for close to free. If a cold start ever becomes
+  # unacceptable again, min-instances=1 is the fallback, at that cost.
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
     id: Deploy
     entrypoint: bash
@@ -37,7 +42,7 @@ steps:
           --timeout=300 \
           --cpu-boost \
           --max-instances=10 \
-          --min-instances=1 \
+          --min-instances=0 \
           --set-env-vars=NODE_ENV=production,APPLICATION_URL=$_APPLICATION_URL,FRONTEND_URL=$_FRONTEND_URL \
           --set-secrets=APPLICATION_SECRET=projects/207624620631/secrets/dev-application-secret:latest,RESEND_API_KEY=projects/207624620631/secrets/dev-spendly-api-resend_api_key:latest,OPENAI_API_KEY=projects/207624620631/secrets/dev-spendly-api-openai_api_key:latest,CLOUDINARY_CLOUD_NAME=projects/207624620631/secrets/dev-spendly-api-cloudinary_cloud_name:latest,CLOUDINARY_API_KEY=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_key:latest,CLOUDINARY_API_SECRET=projects/207624620631/secrets/dev-spendly-api-cloudinary_api_secret:latest,DATABASE_URL=projects/207624620631/secrets/dev-spendly-db-database_url:latest,CRON_SECRET=projects/207624620631/secrets/dev-spendly-api-cron_secret:latest,ANALYTICS_ADMIN_SECRET=projects/207624620631/secrets/dev-spendly-api-analytics_admin_secret:latest \
           --quiet
@@ -109,6 +114,37 @@ steps:
             --quiet
         fi
     secretEnv: ["CRON_SECRET"]
+
+  # Keep-warm ping, see the comment on min-instances in Deploy above. /ping
+  # is unauthenticated and does no DB/work, so no CRON_SECRET needed here.
+  # Every 4 minutes comfortably beats Cloud Run's (undocumented, observed
+  # ~15min) idle scale-down window, so the container is almost always warm
+  # for real requests without paying for a 24/7 reservation.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:slim"
+    id: ScheduleKeepWarm
+    waitFor: ["Deploy"]
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        set -e
+        if gcloud scheduler jobs describe spendly-keep-warm --location=$_DEPLOY_REGION >/dev/null 2>&1; then
+          gcloud scheduler jobs update http spendly-keep-warm \
+            --location=$_DEPLOY_REGION \
+            --schedule="*/4 * * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/ping" \
+            --http-method=GET \
+            --quiet
+        else
+          gcloud scheduler jobs create http spendly-keep-warm \
+            --location=$_DEPLOY_REGION \
+            --schedule="*/4 * * * *" \
+            --time-zone="Etc/UTC" \
+            --uri="$_APPLICATION_URL/ping" \
+            --http-method=GET \
+            --quiet
+        fi
 
   - name: "gcr.io/cloud-builders/docker"
     id: start-cloudsql-proxy
